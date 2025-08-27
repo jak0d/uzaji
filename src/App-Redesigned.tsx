@@ -42,50 +42,56 @@ function AppContent() {
   useAnalytics();
 
   useEffect(() => {
-    const checkOnboarding = async () => {
+    const initializeApp = async () => {
       try {
-        const needsOnboardingFlow = await needsOnboarding();
-        setShowOnboarding(needsOnboardingFlow);
+        await initDB();
         
-        if (!needsOnboardingFlow) {
-          const type = await getBusinessType();
-          if (type) {
-            setBusinessType(type);
+        if (isAuthenticated) {
+          // Only check onboarding if user is authenticated
+          const needsOnboardingFlow = await needsOnboarding();
+          setShowOnboarding(needsOnboardingFlow);
+          
+          if (!needsOnboardingFlow) {
+            const type = await getBusinessType();
+            if (type) {
+              setBusinessType(type);
+            }
           }
         }
       } catch (error) {
-        console.error('Error checking onboarding status:', error);
+        console.error('Error initializing app:', error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    const initializeApp = async () => {
-      try {
-        await initDB();
-      } catch (error) {
-        console.error('Failed to initialize app:', error);
-      }
-    };
+    initializeApp();
+  }, [isAuthenticated]);
 
-    initializeApp().then(checkOnboarding);
-  }, []);
-
+  // Handle automatic redirects based on authentication state
   useEffect(() => {
-    // Handle navigation based on authentication state
+    if (isLoading) return; // Don't redirect while loading
+
     if (isAuthenticated) {
-      // If user is authenticated and on landing/auth page, redirect to dashboard
-      if (location.pathname === '/' || location.pathname === '/auth') {
+      // User is authenticated
+      if (showOnboarding && location.pathname !== '/onboarding') {
+        navigate('/onboarding', { replace: true });
+      } else if (!showOnboarding && (location.pathname === '/' || location.pathname === '/auth')) {
         navigate('/dashboard', { replace: true });
       }
     } else {
-      // If user is not authenticated and trying to access protected routes
-      const protectedRoutes = ['/dashboard', '/transactions', '/products', '/sales', '/purchases', '/reports', '/banking', '/settings', '/test', '/clients'];
+      // User is not authenticated
+      const protectedRoutes = [
+        '/dashboard', '/transactions', '/products', '/sales', 
+        '/purchases', '/reports', '/banking', '/settings', 
+        '/test', '/clients', '/onboarding'
+      ];
+      
       if (protectedRoutes.some(route => location.pathname.startsWith(route))) {
         navigate('/', { replace: true });
       }
     }
-  }, [isAuthenticated, location.pathname, navigate]);
+  }, [isAuthenticated, showOnboarding, location.pathname, navigate, isLoading]);
 
   const handleGetStarted = () => {
     trackNavigation('get_started_click', '/auth');
@@ -101,7 +107,7 @@ function AppContent() {
     try {
       await logout();
       trackAuth('logout');
-      // Force navigation to landing page after logout
+      setShowOnboarding(false); // Reset onboarding state
       navigate('/', { replace: true });
     } catch (error) {
       console.error('Logout failed:', error);
@@ -114,10 +120,19 @@ function AppContent() {
     const result = await login(email, password);
     if (result.success) {
       trackAuth('login', 'email');
-      // Reload business type after login
-      const type = await getBusinessType();
-      if (type) {
-        setBusinessType(type);
+      // Check onboarding and business type after successful login
+      try {
+        const needsOnboardingFlow = await needsOnboarding();
+        setShowOnboarding(needsOnboardingFlow);
+        
+        if (!needsOnboardingFlow) {
+          const type = await getBusinessType();
+          if (type) {
+            setBusinessType(type);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking post-login setup:', error);
       }
     }
     return result;
@@ -127,6 +142,7 @@ function AppContent() {
     const result = await signup(email, password, name);
     if (result.success) {
       trackAuth('signup', 'email');
+      setShowOnboarding(true); // New users need onboarding
     }
     return result;
   };
@@ -135,19 +151,45 @@ function AppContent() {
     const result = await googleAuth();
     if (result.success) {
       trackAuth('login', 'google');
-      // Reload business type after login
-      const type = await getBusinessType();
-      if (type) {
-        setBusinessType(type);
+      // Check onboarding and business type after successful Google auth
+      try {
+        const needsOnboardingFlow = await needsOnboarding();
+        setShowOnboarding(needsOnboardingFlow);
+        
+        if (!needsOnboardingFlow) {
+          const type = await getBusinessType();
+          if (type) {
+            setBusinessType(type);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking post-auth setup:', error);
       }
     }
     return result;
   };
 
+  const handleOnboardingComplete = async () => {
+    setShowOnboarding(false);
+    // Reload business type after onboarding
+    try {
+      const type = await getBusinessType();
+      if (type) {
+        setBusinessType(type);
+      }
+    } catch (error) {
+      console.error('Error loading business type after onboarding:', error);
+    }
+    navigate('/dashboard', { replace: true });
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
       </div>
     );
   }
@@ -157,11 +199,7 @@ function AppContent() {
       {/* Public Routes */}
       <Route 
         path="/" 
-        element={
-          isAuthenticated ? 
-            <Navigate to="/dashboard" replace /> : 
-            <LandingPage onGetStarted={handleGetStarted} />
-        } 
+        element={<LandingPage onGetStarted={handleGetStarted} />} 
       />
       <Route 
         path="/auth" 
@@ -186,17 +224,26 @@ function AppContent() {
         element={<Sitemap />} 
       />
 
+      {/* Onboarding Route - Special case */}
+      <Route 
+        path="/onboarding" 
+        element={
+          isAuthenticated ? 
+            <OnboardingFlow onComplete={handleOnboardingComplete} /> :
+            <Navigate to="/" replace />
+        } 
+      />
+
       {/* Protected Routes with MainLayout */}
       <Route 
         element={
-          isAuthenticated ? (
+          isAuthenticated && !showOnboarding ? (
             <MainLayout user={user!} onLogout={handleLogout} />
           ) : (
-            <Navigate to="/" replace />
+            <Navigate to={isAuthenticated ? "/onboarding" : "/"} replace />
           )
         }
       >
-        <Route index element={<TestDashboard />} />
         <Route path="dashboard" element={<TestDashboard />} />
         <Route 
           path="transactions" 
@@ -230,19 +277,13 @@ function AppContent() {
           <Route path="deployment" element={<DeploymentReadiness />} />
           <Route path="supabase" element={<SupabaseVerification />} />
         </Route>
-        <Route 
-          path="onboarding" 
-          element={
-            <OnboardingFlow 
-              onComplete={() => {
-                setShowOnboarding(false);
-                navigate('/dashboard');
-              }} 
-            />
-          } 
-        />
+        
+        {/* Catch all for authenticated users - redirect to dashboard */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
+
+      {/* Catch all for unauthenticated users - redirect to landing */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
