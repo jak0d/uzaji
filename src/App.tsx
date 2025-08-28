@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Dashboard } from './components/Dashboard';
+import { RedesignedDashboard } from './components/RedesignedDashboard';
 import { TransactionForm } from './components/TransactionForm';
 import { ProductsServices } from './components/ProductsServices';
 import { Reports } from './components/Reports';
@@ -150,16 +150,18 @@ function AppContent() {
       <Route 
         path="/dashboard" 
         element={
-          isAuthenticated ? 
-            <Dashboard 
-              onNavigate={(view) => {
+          isAuthenticated ? (
+            <RedesignedDashboard 
+              onNavigate={(view: string) => {
                 trackNavigation('dashboard_navigation', view);
                 navigate(`/${view}`);
               }} 
               user={user} 
               onLogout={handleLogout} 
-            /> : 
+            />
+          ) : (
             <Navigate to="/" replace />
+          )
         } 
       />
       <Route 

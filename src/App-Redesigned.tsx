@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { MainLayout } from './components/MainLayout';
-import { TestDashboard } from './components/TestDashboard';
+import { RedesignedDashboard } from './components/RedesignedDashboard';
 import { TransactionsTable } from './components/TransactionsTable';
 import { ProductsServicesManager } from './components/ProductsServicesManager';
 import { EnhancedSettings } from './components/EnhancedSettings';
@@ -229,7 +229,18 @@ function AppContent() {
         path="/onboarding" 
         element={
           isAuthenticated ? 
-            <OnboardingFlow onComplete={handleOnboardingComplete} /> :
+            <Route index element={
+              showOnboarding ? 
+                <OnboardingFlow onComplete={() => setShowOnboarding(false)} /> : 
+                <RedesignedDashboard 
+                  onNavigate={(view: string) => {
+                    trackNavigation('dashboard_navigation', view);
+                    navigate(`/${view}`);
+                  }} 
+                  user={user} 
+                  onLogout={logout}
+                />
+            } /> : 
             <Navigate to="/" replace />
         } 
       />
@@ -244,7 +255,19 @@ function AppContent() {
           )
         }
       >
-        <Route path="dashboard" element={<TestDashboard />} />
+        <Route 
+          path="dashboard" 
+          element={
+            <RedesignedDashboard 
+              onNavigate={(view: string) => {
+                trackNavigation('dashboard_navigation', view);
+                navigate(`/${view}`);
+              }} 
+              user={user} 
+              onLogout={logout}
+            />
+          } 
+        />
         <Route 
           path="transactions" 
           element={
