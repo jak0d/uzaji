@@ -16,6 +16,10 @@ export interface UserSubscription {
   currentPeriodEnd: string;
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
+  features?: string[];
+  // Future Stripe integration fields
+  cancelAtPeriodEnd?: boolean;
+  trialEnd?: string | null;
 }
 
 // Available subscription plans
@@ -75,25 +79,32 @@ export class SubscriptionService {
     return SubscriptionService.instance;
   }
 
-  // For now, everyone gets Pro access for free
+    // All features are free during beta
   async getCurrentSubscription(): Promise<UserSubscription> {
     return {
       planId: 'pro-monthly',
       status: 'active',
       currentPeriodStart: new Date().toISOString(),
-      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
+      currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year from now
+      features: [
+        'all_reports',
+        'client_file_tracker',
+        'invoicing',
+        'bill_management',
+        'advanced_analytics'
+      ]
     };
   }
 
-  // Check if user has access to Pro features
+    // Check if user has access to Pro features
   async hasProAccess(): Promise<boolean> {
-    // For now, always return true (free Pro access)
+    // All features are free during beta
     return true;
   }
 
-  // Check if user has access to specific feature
+    // Check if user has access to specific feature
   async hasFeatureAccess(feature: string): Promise<boolean> {
-    // For now, all features are accessible
+    // All features are free during beta
     return true;
   }
 

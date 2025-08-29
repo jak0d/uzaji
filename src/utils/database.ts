@@ -54,6 +54,9 @@ export interface BusinessConfig {
   accounts: Account[];
   uiPreferences: UIPreferences;
   encrypted: boolean;
+  currency?: string;
+  fiscalYearStart?: string;
+  fiscalYearEnd?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -193,12 +196,12 @@ interface BookkeepingDB extends DBSchema {
   accounts: {
     key: string;
     value: Account;
-    indexes: { 'by-type': string; 'by-default': boolean };
+    indexes: { 'by-type': string; 'by-default': string };
   };
   expenseCategories: {
     key: string;
     value: ExpenseCategory;
-    indexes: { 'by-business-type': string; 'by-default': boolean };
+    indexes: { 'by-business-type': string; 'by-default': string };
   };
   fileAttachments: {
     key: string;
@@ -218,7 +221,7 @@ interface BookkeepingDB extends DBSchema {
   fileExpenses: {
     key: string;
     value: FileExpense;
-    indexes: { 'by-file': string; 'by-reimbursable': boolean };
+    indexes: { 'by-file': string; 'by-reimbursable': string };
   };
   extraFees: {
     key: string;
@@ -231,7 +234,7 @@ let db: IDBPDatabase<BookkeepingDB>;
 
 export async function initDB(): Promise<void> {
   db = await openDB<BookkeepingDB>('bookkeeping-db', 3, {
-    async upgrade(db, oldVersion, newVersion, transaction) {
+    async upgrade(db, oldVersion, _newVersion, transaction) {
       // Handle migration from version 1 to 2
       if (oldVersion < 1) {
         // Initial database setup (version 1)
@@ -330,33 +333,8 @@ export async function initDB(): Promise<void> {
       }
 
       if (oldVersion < 3) {
-        // Legal Firm features (version 3)
-        
-        // Legal Firm - Clients store
-        const clientStore = db.createObjectStore('clients', {
-          keyPath: 'id',
-        });
-        clientStore.createIndex('by-name', 'name');
-
-        // Legal Firm - Client Files store
-        const clientFileStore = db.createObjectStore('clientFiles', {
-          keyPath: 'id',
-        });
-        clientFileStore.createIndex('by-client', 'clientId');
-        clientFileStore.createIndex('by-status', 'status');
-
-        // Legal Firm - File Expenses store
-        const fileExpenseStore = db.createObjectStore('fileExpenses', {
-          keyPath: 'id',
-        });
-        fileExpenseStore.createIndex('by-file', 'fileId');
-        fileExpenseStore.createIndex('by-reimbursable', 'isReimbursable');
-
-        // Legal Firm - Extra Fees store
-        const extraFeeStore = db.createObjectStore('extraFees', {
-          keyPath: 'id',
-        });
-        extraFeeStore.createIndex('by-file', 'fileId');
+        // Version 3 migration logic can be added here if needed in the future.
+        // The stores for legal features were already added in version 2.
       }
     },
   });
@@ -410,7 +388,7 @@ async function migrateExistingTransactions(transaction: any): Promise<void> {
   
   // Get default account
   const defaultAccounts = await accountStore.getAll();
-  const defaultAccount = defaultAccounts.find(acc => acc.isDefault);
+  const defaultAccount = defaultAccounts.find((acc: Account) => acc.isDefault);
   
   if (!defaultAccount) return;
   
@@ -637,7 +615,7 @@ export async function getAccounts(): Promise<Account[]> {
 
 export async function getDefaultAccount(): Promise<Account | null> {
   const database = await getDB();
-  const accounts = await database.getAllFromIndex('accounts', 'by-default', true);
+  const accounts = await database.getAllFromIndex('accounts', 'by-default', 'true');
   return accounts.length > 0 ? accounts[0] : null;
 }
 
@@ -749,45 +727,17 @@ export async function getTransactionsByVendor(vendor: string): Promise<Transacti
   return await database.getAllFromIndex('transactions', 'by-vendor', vendor);
 }
 
-// Dashboard metrics calculation
-export async function getDashboardMetrics(): Promise<{
-  netIncome: number;
-  totalRevenue: number;
-  totalExpenses: number;
-  cashBalance: number;
-  accountsReceivable: number;
-  accountsPayable: number;
-}> {
-  const database = await getDB();
-  const transactions = await database.getAll('transactions');
-  const accounts = await database.getAll('accounts');
-  
-  const revenue = transactions
-    .filter(t => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0);
-  
-  const expenses = transactions
-    .filter(t => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0);
-  
-  const cashBalance = accounts
-    .reduce((sum, account) => sum + account.balance, 0);
-  
-  return {
-    netIncome: revenue - expenses,
-    totalRevenue: revenue,
-    totalExpenses: expenses,
-    cashBalance,
-    accountsReceivable: 0, // Phase 2 feature
-    accountsPayable: 0,    // Phase 2 feature
-  };
-}
 
 export async function needsOnboarding(): Promise<boolean> {
   try {
     const db = await getDB();
-    const config = await db.get('businessConfig', 'current');
-    return !config || !config.type || !config.name;
+    const configs = await db.getAll('businessConfig');
+    if (configs.length === 0) {
+      return true; // No config, needs onboarding
+    }
+    // Check if at least one config is complete
+    const isSetupComplete = configs.some(config => config.setupComplete);
+    return !isSetupComplete;
   } catch (error) {
     console.error('Error checking onboarding status:', error);
     return true; // Default to needing onboarding if there's an error
@@ -799,17 +749,30 @@ export async function completeOnboarding(businessType: 'general' | 'legal', busi
   const db = await getDB();
   const tx = db.transaction(['businessConfig', 'accounts', 'expenseCategories'], 'readwrite');
   
-  // Create or update business config
+  // Create or update business config with all required fields
   const config: BusinessConfig = {
     id: 'current',
     type: businessType,
     name: businessName,
+    setupComplete: true,
+    onboardingDate: new Date().toISOString(),
+    defaultCategories: [],
+    accounts: [],
+    uiPreferences: {
+      dashboardLayout: businessType === 'legal' ? 'legal' : 'standard',
+      compactView: false,
+      defaultTransactionType: 'income',
+      showProFeatures: true
+    },
+    encrypted: false,
     currency: 'USD',
     fiscalYearStart: '01-01',
     fiscalYearEnd: '12-31',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
+  
+  console.log('Completing onboarding with config:', config);
   
   await tx.objectStore('businessConfig').put(config);
   
@@ -1020,14 +983,5 @@ export async function updateExtraFee(id: string, updates: Partial<ExtraFee>): Pr
 export async function deleteExtraFee(id: string): Promise<void> {
   const database = await getDB();
   await database.delete('extraFees', id);
-}
-// Dashboard metrics calculation
-export interface DashboardMetrics {
-  netIncome: number;
-  totalRevenue: number;
-  totalExpenses: number;
-  cashBalance: number;
-  accountsReceivable: number;
-  accountsPayable: number;
 }
 

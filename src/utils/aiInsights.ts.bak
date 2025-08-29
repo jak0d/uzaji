@@ -1,0 +1,1650 @@
+// AI Financial Assistant utility
+// Provides cash flow forecasting, anomaly detection, and financial insights
+
+import { Transaction } from './database';
+
+export interface CashFlowForecast {
+  startDate: string;
+  endDate: string;
+  days: Array<{
+    date: string;
+    income: number;
+    expenses: number;
+    balance: number;
+    confidence: 'high' | 'medium' | 'low';
+    method?: string;
+    dailyNet?: number;
+  }>;
+  totalIncome: number;
+  totalExpenses: number;
+  netCashFlow: number;
+  confidence: 'high' | 'medium' | 'low';
+  method?: string;
+  dailyNet?: number[];
+}
+
+export interface FinancialAnomaly {
+  id: string;
+  type: 'duplicate' | 'unusual_spending' | 'large_transaction' | 'category_spike';
+  severity: 'low' | 'medium' | 'high';
+  title: string;
+  description: string;
+  transactions: Transaction[];
+  suggestedAction?: string;
+  detectedAt: string;
+}
+
+export interface AIInsight {
+  id: string;
+  type: 'trend' | 'recommendation' | 'warning' | 'opportunity';
+  title: string;
+  description: string;
+  impact: 'positive' | 'negative' | 'neutral';
+  priority: 'low' | 'medium' | 'high';
+  actionable: boolean;
+  suggestedActions?: string[];
+  createdAt: string;
+}
+
+export class AIFinancialAssistant {
+  private static instance: AIFinancialAssistant;
+
+  private constructor() {}
+
+  static getInstance(): AIFinancialAssistant {
+    if (!AIFinancialAssistant.instance) {
+      AIFinancialAssistant.instance = new AIFinancialAssistant();
+    }
+    return AIFinancialAssistant.instance;
+  }
+
+  // Enhanced Cash Flow Forecasting with multiple forecasting methods
+  async generateCashFlowForecast(
+    transactions: Transaction[],
+    forecastDays: number = 30, // Default to 30 days if not provided
+    method: 'weighted' | 'exponential' | 'moving_average' = 'weighted' // Default to weighted method
+  ): Promise<CashFlowForecast> {
+    const forecast: CashFlowForecast = {
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: new Date(new Date().getTime() + (forecastDays || 90) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      days: [],
+      totalIncome: 0,
+      totalExpenses: 0,
+      netCashFlow: 0,
+      confidence: 'low',
+      method,
+      dailyNet: []
+    };
+
+    const today = new Date();
+
+    // Analyze historical data with enhanced pattern recognition
+    const historicalData = this.analyzeHistoricalData(transactions);
+    const seasonalPatterns = this.identifySeasonalPatterns(transactions);
+
+    // Get current balance and recent trends
+    const currentBalance = this.calculateCurrentBalance(transactions);
+    const recentTrend = this.calculateRecentTrend(transactions, 30); // 30-day trend
+
+    // Generate forecast for each day using selected method
+    for (let i = 0; i < forecastDays; i++) {
+      const forecastDate = new Date(today);
+      forecastDate.setDate(today.getDate() + i);
+      const dateKey = forecastDate.toISOString().split('T')[0];
+
+      let projectedIncome: number;
+      let projectedExpenses: number;
+
+      switch (method) {
+        case 'exponential':
+          [projectedIncome, projectedExpenses] = this.exponentialSmoothingForecast(
+            historicalData,
+            forecastDate,
+            recentTrend
+          );
+          break;
+
+        case 'moving_average':
+          [projectedIncome, projectedExpenses] = this.movingAverageForecast(
+            historicalData,
+            forecastDate,
+            7 // 7-day moving average
+          );
+          break;
+
+        case 'weighted':
+        default:
+          [projectedIncome, projectedExpenses] = this.weightedForecast(
+            historicalData,
+            forecastDate,
+            seasonalPatterns,
+            recentTrend
+          );
+      }
+
+      // Adjust for known future events (implement this method based on your data)
+      const eventAdjustment = this.calculateEventAdjustment(forecastDate);
+      projectedIncome += eventAdjustment.incomeMultiplier;
+      projectedExpenses += eventAdjustment.expenseMultiplier;
+
+      // Calculate confidence based on data quality and forecast horizon
+      const confidence = this.calculateForecastConfidence(
+        historicalData,
+        i,
+        forecastDays,
+        seasonalPatterns
+      );
+
+      // Calculate running balance
+      const previousBalance = forecast.days[i - 1]?.balance || currentBalance;
+      const dailyNet = projectedIncome - projectedExpenses;
+      const projectedBalance = previousBalance + dailyNet;
+
+      forecast.days.push({
+        date: dateKey,
+        income: Math.round(projectedIncome * 100) / 100,
+        expenses: Math.round(projectedExpenses * 100) / 100,
+        balance: Math.round(projectedBalance * 100) / 100,
+        confidence,
+        method,
+        dailyNet: Math.round(dailyNet * 100) / 100
+      });
+
+      forecast.totalIncome += projectedIncome;
+      forecast.totalExpenses += projectedExpenses;
+      forecast.netCashFlow += dailyNet;
+      forecast.dailyNet?.push(dailyNet);
+    }
+
+    forecast.confidence = this.calculateForecastConfidence(
+      historicalData,
+      forecastDays - 1,
+      forecastDays,
+      seasonalPatterns
+    );
+
+    return forecast;
+  }
+
+  // Weighted forecast that considers multiple factors
+  private weightedForecast(
+    historicalData: any,
+    forecastDate: Date,
+    seasonalPatterns: any,
+    recentTrend: { income: number; expenses: number }
+  ): [number, number] {
+    const dayOfWeek = forecastDate.getDay();
+    const dayOfMonth = forecastDate.getDate();
+    const month = forecastDate.getMonth();
+
+    // Base prediction from historical averages
+    const baseIncome = this.predictDailyIncome(historicalData, dayOfWeek, dayOfMonth);
+    const baseExpenses = this.predictDailyExpenses(historicalData, dayOfWeek, dayOfMonth);
+
+    // Apply seasonal adjustments
+    const seasonalFactor = seasonalPatterns.monthly[month] || 1.0;
+
+    // Apply recent trend (weighted average of long-term and short-term trends)
+    const trendWeight = 0.3; // How much to weight recent trends vs historical
+
+    const projectedIncome = (baseIncome * (1 - trendWeight)) +
+      (recentTrend.income * trendWeight * seasonalFactor);
+
+    const projectedExpenses = (baseExpenses * (1 - trendWeight)) +
+      (recentTrend.expenses * trendWeight * seasonalFactor);
+
+    return [projectedIncome, projectedExpenses];
+  }
+
+  // Exponential smoothing forecast (good for data with trends)
+  private exponentialSmoothingForecast(
+    historicalData: any,
+    forecastDate: Date,
+    alpha: number = 0.3 // Smoothing factor (0-1)
+  ): [number, number] {
+    // Implement exponential smoothing logic
+    // This is a simplified version - in practice, you'd use more sophisticated methods
+    // like Holt-Winters for seasonal data
+    const dayOfWeek = forecastDate.getDay();
+    const prevDay = new Date(forecastDate);
+    prevDay.setDate(forecastDate.getDate() - 1);
+
+    const prevIncome = this.predictDailyIncome(historicalData, prevDay.getDay(), prevDay.getDate());
+    const prevExpenses = this.predictDailyExpenses(historicalData, prevDay.getDay(), prevDay.getDate());
+
+    const currentIncome = this.predictDailyIncome(historicalData, dayOfWeek, forecastDate.getDate());
+    const currentExpenses = this.predictDailyExpenses(historicalData, dayOfWeek, forecastDate.getDate());
+
+    // Simple exponential smoothing
+    const projectedIncome = (alpha * currentIncome) + ((1 - alpha) * prevIncome);
+    const projectedExpenses = (alpha * currentExpenses) + ((1 - alpha) * prevExpenses);
+
+    return [projectedIncome, projectedExpenses];
+  }
+
+  // Moving average forecast (good for stable trends)
+  private movingAverageForecast(
+    historicalData: any,
+    forecastDate: Date,
+    windowSize: number = 7 // 7-day moving average
+  ): [number, number] {
+    // Calculate moving average of the last 'windowSize' days
+    const dailyAverages = [];
+    const startDate = new Date(forecastDate);
+    startDate.setDate(forecastDate.getDate() - windowSize);
+
+    for (let d = new Date(startDate); d < forecastDate; d.setDate(d.getDate() + 1)) {
+      const dayIncome = this.predictDailyIncome(historicalData, d.getDay(), d.getDate());
+      const dayExpenses = this.predictDailyExpenses(historicalData, d.getDay(), d.getDate());
+      dailyAverages.push({ income: dayIncome, expenses: dayExpenses });
+    }
+
+    // Simple average of the window
+    const sum = dailyAverages.reduce((acc, curr) => ({
+      income: acc.income + curr.income,
+      expenses: acc.expenses + curr.expenses
+    }), { income: 0, expenses: 0 });
+
+    return [
+      sum.income / dailyAverages.length,
+      sum.expenses / dailyAverages.length
+    ];
+  }
+
+  // Enhanced Anomaly Detection with multiple detection methods
+  async detectAnomalies(transactions: Transaction[]): Promise<FinancialAnomaly[]> {
+    const anomalies: FinancialAnomaly[] = [];
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+
+    // 1. Detect duplicate transactions
+    const duplicates = this.detectDuplicateTransactions(transactions);
+    anomalies.push(...duplicates);
+
+    // 2. Detect unusual spending patterns (statistical anomalies)
+    const spendingAnomalies = this.detectSpendingAnomalies(transactions);
+    anomalies.push(...spendingAnomalies);
+
+    // 3. Detect unusual income patterns
+    const incomeAnomalies = this.detectIncomeAnomalies(transactions);
+    anomalies.push(...incomeAnomalies);
+
+    // 4. Detect category spending spikes
+    const categoryAnomalies = this.detectCategoryAnomalies(transactions);
+    anomalies.push(...categoryAnomalies);
+
+    // 5. Detect potential fraud patterns
+    const fraudAnomalies = this.detectPotentialFraud(transactions);
+    anomalies.push(...fraudAnomalies);
+
+    // 6. Detect unusual transaction timing
+    const timingAnomalies = this.detectTimingAnomalies(transactions);
+    anomalies.push(...timingAnomalies);
+
+    // Sort by severity and date (newest first)
+    return anomalies.sort((a, b) => {
+      const severityOrder = { high: 3, medium: 2, low: 1 };
+      if (severityOrder[b.severity] !== severityOrder[a.severity]) {
+        return severityOrder[b.severity] - severityOrder[a.severity];
+      }
+      return new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime();
+    });
+  }
+
+  // Detect statistical anomalies in spending
+  private detectDuplicateTransactions(transactions: Transaction[]): FinancialAnomaly[] {
+    const duplicates: Transaction[][] = [];
+    const seen = new Map<string, Transaction[]>();
+    const now = new Date();
+
+    // Group transactions by amount, description, and date (within 1 hour)
+    transactions.forEach(transaction => {
+      if (!transaction.amount || !transaction.description) return;
+      
+      const transactionDate = new Date(transaction.date);
+      const timeDiff = Math.abs(now.getTime() - transactionDate.getTime());
+      const hoursDiff = timeDiff / (1000 * 60 * 60);
+      
+      // Skip transactions older than 30 days
+      if (hoursDiff > 30 * 24) return;
+      
+      const key = `${transaction.amount}_${transaction.description.toLowerCase().trim()}`;
+      
+      if (!seen.has(key)) {
+        seen.set(key, [transaction]);
+      } else {
+        const existing = seen.get(key) || [];
+        // Check if this is a duplicate (same amount, similar description, within 24 hours)
+        const isDuplicate = existing.some(t => {
+          const existingDate = new Date(t.date);
+          const diffHours = Math.abs(transactionDate.getTime() - existingDate.getTime()) / (1000 * 60 * 60);
+          return diffHours < 24; // Within 24 hours
+        });
+        
+        if (isDuplicate) {
+          existing.push(transaction);
+        } else {
+          seen.set(key, [...existing, transaction]);
+        }
+      }
+    });
+
+    // Filter for actual duplicates (2+ transactions)
+    const duplicateGroups = Array.from(seen.values()).filter(group => group.length > 1);
+    
+    // Convert to FinancialAnomaly format
+    return duplicateGroups.map(group => ({
+      id: `duplicate-${group[0].id}`,
+      type: 'duplicate',
+      severity: group.length > 2 ? 'high' : 'medium',
+      title: `Possible duplicate transaction${group.length > 1 ? 's' : ''}`,
+      description: `Found ${group.length} similar transactions within 24 hours`,
+      transactions: group,
+      suggestedAction: 'Review these transactions to ensure they are not duplicates',
+      detectedAt: new Date().toISOString()
+    }));
+  }
+
+  private detectIncomeAnomalies(transactions: Transaction[]): FinancialAnomaly[] {
+    const anomalies: FinancialAnomaly[] = [];
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+
+    // Filter income transactions from the last 30 days
+    const recentIncome = transactions
+      .filter(t => t.type === 'income' && new Date(t.date) >= thirtyDaysAgo)
+      .map(t => ({
+        ...t,
+        date: new Date(t.date)
+      }));
+
+    if (recentIncome.length < 5) return []; // Not enough data
+
+    // Group by source/payee
+    const incomeBySource = recentIncome.reduce((acc, transaction) => {
+      const source = transaction.source || 'Unknown';
+      if (!acc[source]) {
+        acc[source] = [];
+      }
+      acc[source].push(transaction);
+      return acc;
+    }, {} as Record<string, typeof recentIncome>);
+
+    // Analyze each income source
+    Object.entries(incomeBySource).forEach(([source, sourceIncomes]) => {
+      if (sourceIncomes.length < 2) return; // Need at least 2 transactions for comparison
+
+      const amounts = sourceIncomes.map(t => t.amount);
+      const mean = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+      const stdDev = Math.sqrt(
+        amounts.reduce((sq, n) => sq + Math.pow(n - mean, 2), 0) / amounts.length
+      );
+
+      // Check for unusually high/low income
+      sourceIncomes.forEach(transaction => {
+        const zScore = (transaction.amount - mean) / stdDev;
+        
+        if (zScore > 2.5) {
+          // Unusually high income
+          anomalies.push({
+            id: `income-high-${transaction.id}`,
+            type: 'unusual_spending',
+            severity: 'high',
+            title: `Unusually high income from ${source}`,
+            description: `Income of $${transaction.amount} is significantly higher than the average of $${mean.toFixed(2)} for this source`,
+            transactions: [transaction],
+            suggestedAction: 'Verify this income matches your expectations',
+            detectedAt: now.toISOString()
+          });
+        } else if (zScore < -2.5) {
+          // Unusually low income
+          anomalies.push({
+            id: `income-low-${transaction.id}`,
+            type: 'unusual_spending',
+            severity: 'medium',
+            title: `Unusually low income from ${source}`,
+            description: `Income of $${transaction.amount} is significantly lower than the average of $${mean.toFixed(2)} for this source`,
+            transactions: [transaction],
+            suggestedAction: 'Check if this income is correct or if there might be a delay',
+            detectedAt: now.toISOString()
+          });
+        }
+      });
+
+      // Check for missing expected income
+      const sortedDates = [...sourceIncomes]
+        .map(t => t.date.getTime())
+        .sort((a, b) => a - b);
+      
+      // Calculate average days between income
+      let totalDays = 0;
+      for (let i = 1; i < sortedDates.length; i++) {
+        totalDays += (sortedDates[i] - sortedDates[i - 1]) / (1000 * 60 * 60 * 24);
+      }
+      const avgDaysBetween = totalDays / (sortedDates.length - 1);
+      
+      // If it's been significantly longer than average since last payment
+      const lastPaymentDate = new Date(Math.max(...sortedDates));
+      const daysSinceLastPayment = (now.getTime() - lastPaymentDate.getTime()) / (1000 * 60 * 60 * 24);
+      
+      if (daysSinceLastPayment > avgDaysBetween * 1.5 && avgDaysBetween < 45) {
+        anomalies.push({
+          id: `missing-income-${source}-${lastPaymentDate.toISOString()}`,
+          type: 'unusual_spending',
+          severity: 'high',
+          title: `Missing expected income from ${source}`,
+          description: `It has been ${Math.round(daysSinceLastPayment)} days since the last payment, which is longer than the average of ${avgDaysBetween.toFixed(1)} days between payments`,
+          transactions: sourceIncomes.sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 3),
+          suggestedAction: 'Check if this income is delayed or if there might be an issue with the payment',
+          detectedAt: now.toISOString()
+        });
+      }
+    });
+
+    return anomalies;
+  }
+
+  private detectCategoryAnomalies(transactions: Transaction[]): FinancialAnomaly[] {
+    const anomalies: FinancialAnomaly[] = [];
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+    const ninetyDaysAgo = new Date(now);
+    ninetyDaysAgo.setDate(now.getDate() - 90);
+
+    // Get recent transactions (last 30 days) and historical transactions (last 90 days)
+    const recentTransactions = transactions
+      .filter(t => new Date(t.date) >= thirtyDaysAgo)
+      .filter(t => t.type === 'expense');
+    
+    const historicalTransactions = transactions
+      .filter(t => new Date(t.date) >= ninetyDaysAgo && new Date(t.date) < thirtyDaysAgo)
+      .filter(t => t.type === 'expense');
+
+    if (recentTransactions.length < 10 || historicalTransactions.length < 30) {
+      return []; // Not enough data
+    }
+
+    // Group transactions by category
+    const recentByCategory = this.groupTransactionsByCategory(recentTransactions);
+    const historicalByCategory = this.groupTransactionsByCategory(historicalTransactions);
+
+    // Calculate average spending per category for both periods
+    const recentAverages = this.calculateCategoryAverages(recentByCategory, 30);
+    const historicalAverages = this.calculateCategoryAverages(historicalByCategory, 60);
+
+    // Compare recent vs historical spending by category
+    Object.entries(recentAverages).forEach(([category, recentAvg]) => {
+      const historicalAvg = historicalAverages[category];
+      
+      // Skip if we don't have historical data for this category
+      if (!historicalAvg) {
+        return;
+      }
+      
+      // Calculate the spending ratio (recent vs historical)
+      const ratio = recentAvg / historicalAvg;
+      
+      // If spending has increased significantly (more than 200%)
+      if (ratio > 2.0) {
+        const categoryTransactions = recentByCategory[category] || [];
+        const totalSpent = categoryTransactions.reduce((sum, t) => sum + t.amount, 0);
+        
+        anomalies.push({
+          id: `category-spike-${category}-${now.getTime()}`,
+          type: 'category_spike',
+          severity: ratio > 3.0 ? 'high' : 'medium',
+          title: `Unusual spending in ${category} category`,
+          description: `Your spending in ${category} is ${ratio.toFixed(1)}x higher than usual ` +
+                      `($${recentAvg.toFixed(2)} vs $${historicalAvg.toFixed(2)} daily average)`,
+          transactions: categoryTransactions
+            .sort((a, b) => b.amount - a.amount)
+            .slice(0, 5), // Top 5 largest transactions
+          suggestedAction: 'Review these transactions to ensure they are expected',
+          detectedAt: now.toISOString()
+        });
+      }
+    });
+
+    return anomalies;
+  }
+
+  // Helper method to group transactions by category
+  private groupTransactionsByCategory(transactions: Transaction[]): Record<string, Transaction[]> {
+    return transactions.reduce((acc, transaction) => {
+      const category = transaction.category || 'Uncategorized';
+      if (!acc[category]) {
+        acc[category] = [];
+      }
+      acc[category].push(transaction);
+      return acc;
+    }, {} as Record<string, Transaction[]>);
+  }
+
+  // Helper method to calculate average daily spending by category
+  private calculateCategoryAverages(
+    transactionsByCategory: Record<string, Transaction[]>,
+    days: number
+  ): Record<string, number> {
+    const result: Record<string, number> = {};
+    
+    Object.entries(transactionsByCategory).forEach(([category, transactions]) => {
+      const total = transactions.reduce((sum, t) => sum + t.amount, 0);
+      result[category] = total / days;
+    });
+    
+    return result;
+  }
+
+  private detectPotentialFraud(transactions: Transaction[]): FinancialAnomaly[] {
+    const anomalies: FinancialAnomaly[] = [];
+    const now = new Date();
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(now.getDate() - 7);
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+
+    // Get recent transactions (last 7 days)
+    const recentTransactions = transactions
+      .filter(t => new Date(t.date) >= sevenDaysAgo)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    if (recentTransactions.length === 0) {
+      return [];
+    }
+
+    // 1. Check for multiple high-value transactions in a short time period
+    const highValueThreshold = 1000; // $1000
+    const highValueRecent = recentTransactions.filter(t => t.amount >= highValueThreshold);
+    
+    if (highValueRecent.length >= 3) {
+      const firstTransaction = new Date(highValueRecent[highValueRecent.length - 1].date);
+      const lastTransaction = new Date(highValueRecent[0].date);
+      const hoursDiff = (lastTransaction.getTime() - firstTransaction.getTime()) / (1000 * 60 * 60);
+      
+      if (hoursDiff < 24) { // Multiple high-value transactions within 24 hours
+        anomalies.push({
+          id: `fraud-multiple-high-value-${now.getTime()}`,
+          type: 'large_transaction',
+          severity: 'high',
+          title: 'Multiple high-value transactions detected',
+          description: `${highValueRecent.length} transactions over $${highValueThreshold} ` +
+                     `detected within ${Math.round(hoursDiff)} hours`,
+          transactions: highValueRecent,
+          suggestedAction: 'Verify these transactions for potential fraud',
+          detectedAt: now.toISOString()
+        });
+      }
+    }
+
+    // 2. Check for transactions in unusual locations or from new devices
+    const locationMap = new Map<string, Transaction[]>();
+    const deviceMap = new Map<string, Transaction[]>();
+    
+    recentTransactions.forEach(transaction => {
+      // Group by location (if available)
+      if (transaction.location) {
+        if (!locationMap.has(transaction.location)) {
+          locationMap.set(transaction.location, []);
+        }
+        locationMap.get(transaction.location)?.push(transaction);
+      }
+      
+      // Group by device (if available)
+      if (transaction.deviceId) {
+        if (!deviceMap.has(transaction.deviceId)) {
+          deviceMap.set(transaction.deviceId, []);
+        }
+        deviceMap.get(transaction.deviceId)?.push(transaction);
+      }
+    });
+
+    // Flag transactions from locations with only 1 transaction
+    locationMap.forEach((locationTransactions, location) => {
+      if (locationTransactions.length === 1) {
+        const transaction = locationTransactions[0];
+        // Only flag if it's a significant amount
+        if (transaction.amount > 100) {
+          anomalies.push({
+            id: `fraud-new-location-${transaction.id}`,
+            type: 'unusual_spending',
+            severity: 'medium',
+            title: 'Transaction from new location',
+            description: `Transaction from new location: ${location}`,
+            transactions: [transaction],
+            suggestedAction: 'Verify if this transaction was authorized',
+            detectedAt: now.toISOString()
+          });
+        }
+      }
+    });
+
+    // Flag transactions from new devices
+    deviceMap.forEach((deviceTransactions, deviceId) => {
+      if (deviceTransactions.length === 1) {
+        const transaction = deviceTransactions[0];
+        // Only flag if it's a significant amount
+        if (transaction.amount > 100) {
+          anomalies.push({
+            id: `fraud-new-device-${transaction.id}`,
+            type: 'unusual_spending',
+            severity: 'medium',
+            title: 'Transaction from new device',
+            description: 'Transaction from a device not previously used',
+            transactions: [transaction],
+            suggestedAction: 'Verify if this transaction was authorized',
+            detectedAt: now.toISOString()
+          });
+        }
+      }
+    });
+
+    // 3. Check for transactions just below reporting thresholds
+    const thresholdAmounts = [100, 500, 1000, 2000, 5000, 10000];
+    const thresholdTransactions = recentTransactions.filter(t => 
+      thresholdAmounts.some(threshold => 
+        t.amount >= threshold * 0.9 && t.amount < threshold
+      )
+    );
+
+    if (thresholdTransactions.length > 0) {
+      const suspiciousAmounts = thresholdTransactions
+        .map(t => t.amount.toFixed(2))
+        .join(', $');
+      
+      anomalies.push({
+        id: `fraud-threshold-${now.getTime()}`,
+        type: 'unusual_spending',
+        severity: 'low',
+        title: 'Transactions just below common thresholds',
+        description: `Transactions detected just below common reporting thresholds: $${suspiciousAmounts}`,
+        transactions: thresholdTransactions,
+        suggestedAction: 'Review these transactions for potential structuring attempts',
+        detectedAt: now.toISOString()
+      });
+    }
+
+    return anomalies;
+  }
+
+  private detectTimingAnomalies(transactions: Transaction[]): FinancialAnomaly[] {
+    const anomalies: FinancialAnomaly[] = [];
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+    const ninetyDaysAgo = new Date(now);
+    ninetyDaysAgo.setDate(now.getDate() - 90);
+
+    // Get recent transactions (last 30 days) and historical transactions (last 90 days)
+    const recentTransactions = transactions
+      .filter(t => new Date(t.date) >= thirtyDaysAgo)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    const historicalTransactions = transactions
+      .filter(t => new Date(t.date) >= ninetyDaysAgo && new Date(t.date) < thirtyDaysAgo);
+
+    if (recentTransactions.length === 0 || historicalTransactions.length === 0) {
+      return [];
+    }
+
+    // 1. Check for unusual transaction times (e.g., late night or early morning)
+    const unusualHourTransactions = recentTransactions.filter(transaction => {
+      const hour = new Date(transaction.date).getHours();
+      // Consider transactions between 12 AM - 5 AM as unusual
+      return hour >= 0 && hour < 5;
+    });
+
+    if (unusualHourTransactions.length > 0) {
+      anomalies.push({
+        id: `timing-unusual-hours-${now.getTime()}`,
+        type: 'unusual_spending',
+        severity: 'medium',
+        title: 'Transactions during unusual hours',
+        description: `${unusualHourTransactions.length} transactions detected between 12 AM - 5 AM`,
+        transactions: unusualHourTransactions.slice(0, 5), // Show up to 5 examples
+        suggestedAction: 'Review these transactions for potential fraud',
+        detectedAt: now.toISOString()
+      });
+    }
+
+    // 2. Check for rapid succession transactions
+    const rapidTransactions: Transaction[] = [];
+    for (let i = 1; i < recentTransactions.length; i++) {
+      const current = recentTransactions[i];
+      const previous = recentTransactions[i - 1];
+      const timeDiff = (new Date(current.date).getTime() - new Date(previous.date).getTime()) / (1000 * 60); // in minutes
+      
+      // If two transactions from the same merchant within 5 minutes
+      if (timeDiff < 5 && current.description === previous.description) {
+        if (!rapidTransactions.some(t => t.id === current.id)) {
+          rapidTransactions.push(current);
+        }
+        if (!rapidTransactions.some(t => t.id === previous.id)) {
+          rapidTransactions.push(previous);
+        }
+      }
+    }
+
+    if (rapidTransactions.length > 0) {
+      anomalies.push({
+        id: `timing-rapid-${now.getTime()}`,
+        type: 'duplicate',
+        severity: 'high',
+        title: 'Rapid succession transactions',
+        description: `${rapidTransactions.length} transactions detected in rapid succession`,
+        transactions: rapidTransactions.slice(0, 5), // Show up to 5 examples
+        suggestedAction: 'Verify these transactions for potential duplicate charges',
+        detectedAt: now.toISOString()
+      });
+    }
+
+    // 3. Check for unusual day-of-week patterns
+    const dayOfWeekCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    // Count transactions by day of week
+    historicalTransactions.forEach(t => {
+      const day = new Date(t.date).getDay();
+      dayOfWeekCounts[day] = (dayOfWeekCounts[day] || 0) + 1;
+    });
+
+    // Calculate average transactions per day
+    const totalDays = 60; // 90 days total, but we're using 60 weekdays
+    const avgPerDay = historicalTransactions.length / totalDays;
+    
+    // Check recent transactions for unusual day patterns
+    const recentDayCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+    recentTransactions.forEach(t => {
+      const day = new Date(t.date).getDay();
+      recentDayCounts[day] = (recentDayCounts[day] || 0) + 1;
+    });
+
+    // Check for significant deviations from historical patterns
+    Object.entries(recentDayCounts).forEach(([day, count]) => {
+      const dayNum = parseInt(day);
+      const historicalAvg = (dayOfWeekCounts[dayNum] / totalDays) * 30; // Scale to 30 days
+      
+      // If recent count is more than 2x historical average
+      if (count > historicalAvg * 2 && count > 5) {
+        anomalies.push({
+          id: `timing-day-pattern-${dayNum}-${now.getTime()}`,
+          type: 'unusual_spending',
+          severity: 'low',
+          title: `Unusual activity on ${dayNames[dayNum]}s`,
+          description: `Detected ${count} transactions on ${dayNames[dayNum]}s, which is higher than usual`,
+          transactions: recentTransactions
+            .filter(t => new Date(t.date).getDay() === dayNum)
+            .sort((a, b) => b.amount - a.amount)
+            .slice(0, 3), // Show top 3 largest transactions
+          suggestedAction: 'Review these transactions to ensure they are expected',
+          detectedAt: now.toISOString()
+        });
+      }
+    });
+
+    return anomalies;
+  }
+
+  private detectSpendingAnomalies(transactions: Transaction[]): FinancialAnomaly[] {
+    const anomalies: FinancialAnomaly[] = [];
+    const expenses = transactions
+      .filter(t => t.type === 'expense')
+      .map(t => t.amount);
+
+    if (expenses.length < 10) return []; // Not enough data
+
+    // Calculate mean and standard deviation
+    const mean = expenses.reduce((a, b) => a + b, 0) / expenses.length;
+    const squareDiffs = expenses.map(value => Math.pow(value - mean, 2));
+    const stdDev = Math.sqrt(squareDiffs.reduce((a, b) => a + b, 0) / expenses.length);
+
+    // Find outliers (beyond 2 standard deviations)
+    transactions.forEach(transaction => {
+      if (transaction.type === 'expense') {
+        const zScore = (transaction.amount - mean) / stdDev;
+        if (zScore > 2) {
+          anomalies.push({
+            id: `spike-${transaction.id}`,
+            type: 'unusual_spending',
+            severity: zScore > 3 ? 'high' : 'medium',
+            title: `Unusually high expense: ${transaction.description}`,
+            description: `This expense of ${transaction.amount} is significantly higher than your average expense of ${mean.toFixed(2)}.`,
+            transactions: [transaction],
+            suggestedAction: 'Review this transaction to ensure it is legitimate.',
+            detectedAt: new Date().toISOString()
+          });
+        }
+      }
+
+  // Calculate mean and standard deviation
+  const mean = expenses.reduce((a, b) => a + b, 0) / expenses.length;
+  const squareDiffs = expenses.map(value => Math.pow(value - mean, 2));
+  const stdDev = Math.sqrt(squareDiffs.reduce((a, b) => a + b, 0) / expenses.length);
+
+  // Find outliers (beyond 2 standard deviations)
+  transactions.forEach(transaction => {
+    if (transaction.type === 'expense') {
+      const zScore = (transaction.amount - mean) / stdDev;
+      if (zScore > 2) {
+    const categorySpending = this.analyzeCategorySpending(transactions);
+    const topSpendingCategory = Object.entries(categorySpending)
+      .sort(([, a], [, b]) => b - a)[0];
+
+    if (topSpendingCategory && topSpendingCategory[1] > 0) {
+      const projectedIncome = this.weightedForecast(historicalData, new Date(), seasonalPatterns, {
+        income: historicalData.avgDailyIncome,
+        expenses: historicalData.avgDailyExpenses
+      })[0];
+
+      const projectedExpenses = this.weightedForecast(historicalData, new Date(), seasonalPatterns, {
+        income: historicalData.avgDailyIncome,
+        expenses: historicalData.avgDailyExpenses
+      })[1];
+
+      if (projectedExpenses > projectedIncome * 1.2) {
+        anomalies.push({
+          id: `category-anomaly-${Date.now()}`,
+          type: 'unusual_category_spending',
+          severity: 'medium',
+          title: `Unusually high spending in ${topSpendingCategory[0]}`,
+          description: `Your spending in ${topSpendingCategory[0]} is significantly higher than your average spending.`,
+          transactions: transactions.filter(t => t.category === topSpendingCategory[0]),
+          suggestedAction: 'Review your spending in this category to ensure it is legitimate.',
+          detectedAt: new Date().toISOString()
+        });
+      }
+    }
+
+    return anomalies;
+  }
+
+  // Analyze historical data with enhanced pattern recognition
+  private analyzeHistoricalData(transactions: Transaction[]): any {
+    const historicalData: any = {
+      dailyIncome: {},
+      dailyExpenses: {},
+      monthlyIncome: {},
+      monthlyExpenses: {},
+      totalTransactions: transactions.length,
+      avgDailyIncome: 0,
+      avgDailyExpenses: 0
+    };
+
+    // Group transactions by day of week and month
+    transactions.forEach(transaction => {
+      const date = new Date(transaction.date);
+      const dayOfWeek = date.getDay();
+      const dayOfMonth = date.getDate();
+      const month = date.getMonth();
+      
+      if (transaction.type === 'income') {
+        // Daily income
+        if (!historicalData.dailyIncome[dayOfWeek]) {
+          historicalData.dailyIncome[dayOfWeek] = [];
+        }
+        historicalData.dailyIncome[dayOfWeek].push(transaction.amount);
+        
+        // Monthly income
+        if (!historicalData.monthlyIncome[dayOfMonth]) {
+          historicalData.monthlyIncome[dayOfMonth] = [];
+        }
+        historicalData.monthlyIncome[dayOfMonth].push(transaction.amount);
+        
+        // Total income
+        historicalData.avgDailyIncome = (historicalData.avgDailyIncome || 0) + transaction.amount;
+      } else {
+        // Daily expenses
+        if (!historicalData.dailyExpenses[dayOfWeek]) {
+          historicalData.dailyExpenses[dayOfWeek] = [];
+        }
+        historicalData.dailyExpenses[dayOfWeek].push(transaction.amount);
+        
+        // Monthly expenses
+        if (!historicalData.monthlyExpenses[dayOfMonth]) {
+          historicalData.monthlyExpenses[dayOfMonth] = [];
+        }
+        historicalData.monthlyExpenses[dayOfMonth].push(transaction.amount);
+        
+        // Total expenses
+        historicalData.avgDailyExpenses = (historicalData.avgDailyExpenses || 0) + transaction.amount;
+      }
+    });
+
+    // Calculate averages
+    if (transactions.length > 0) {
+      const days = Math.max(1, (new Date().getTime() - new Date(transactions[0].date).getTime()) / (1000 * 60 * 60 * 24));
+      historicalData.avgDailyIncome = historicalData.avgDailyIncome / days;
+      historicalData.avgDailyExpenses = historicalData.avgDailyExpenses / days;
+    }
+
+    return historicalData;
+  }
+
+  // Identify seasonal patterns in transaction data
+  private identifySeasonalPatterns(transactions: Transaction[]): any {
+    const patterns: any = {
+      weekly: { income: Array(7).fill(0), expense: Array(7).fill(0) },
+      monthly: { income: Array(31).fill(0), expense: Array(31).fill(0) },
+      dayOfWeekCount: Array(7).fill(0),
+      dayOfMonthCount: Array(31).fill(0)
+    };
+
+    // Count transactions by day of week and month
+    transactions.forEach(transaction => {
+      const date = new Date(transaction.date);
+      const dayOfWeek = date.getDay();
+      const dayOfMonth = date.getDate() - 1; // 0-based
+      const type = transaction.type === 'income' ? 'income' : 'expense';
+      
+      patterns.weekly[type][dayOfWeek] += transaction.amount;
+      patterns.monthly[type][dayOfMonth] += transaction.amount;
+      
+      patterns.dayOfWeekCount[dayOfWeek]++;
+      patterns.dayOfMonthCount[dayOfMonth]++;
+    });
+
+    // Calculate averages
+    for (let i = 0; i < 7; i++) {
+      if (patterns.dayOfWeekCount[i] > 0) {
+        patterns.weekly.income[i] /= patterns.dayOfWeekCount[i];
+        patterns.weekly.expense[i] /= patterns.dayOfWeekCount[i];
+      }
+    }
+    
+    for (let i = 0; i < 31; i++) {
+      if (patterns.dayOfMonthCount[i] > 0) {
+        patterns.monthly.income[i] /= patterns.dayOfMonthCount[i];
+        patterns.monthly.expense[i] /= patterns.dayOfMonthCount[i];
+      }
+    }
+
+    return patterns;
+  }
+
+  // Generate AI Insights
+  async generateInsights(transactions: Transaction[]): Promise<AIInsight[]> {
+    const insights: AIInsight[] = [];
+
+    // Trend analysis
+    const trendInsights = this.analyzeTrends(transactions);
+    insights.push(...trendInsights);
+
+    // Spending recommendations
+    const spendingRecommendations = this.generateSpendingRecommendations(transactions);
+    insights.push(...spendingRecommendations);
+
+    // Cash flow warnings
+    const cashFlowWarnings = this.generateCashFlowWarnings(transactions);
+    insights.push(...cashFlowWarnings);
+
+    // Growth opportunities
+    const opportunities = this.identifyOpportunities(transactions);
+    insights.push(...opportunities);
+
+    return insights.sort((a, b) => {
+      // Sort by priority first, then by date (newest first)
+      const priorityOrder = { high: 3, medium: 2, low: 1 };
+      const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }
+
+  // Analyze trends in transaction data
+  private analyzeTrends(transactions: Transaction[]): AIInsight[] {
+    const insights: AIInsight[] = [];
+
+    // Revenue trend analysis
+    const revenueGrowth = this.calculateRevenueGrowth(transactions);
+    if (revenueGrowth.trend !== 'stable') {
+      insights.push({
+        id: `revenue-trend-${Date.now()}`,
+        type: 'trend',
+        title: `Revenue ${revenueGrowth.trend === 'increasing' ? 'Growth' : 'Decline'} Detected`,
+        description: `Your revenue has ${revenueGrowth.trend === 'increasing' ? 'increased' : 'decreased'} by ${Math.abs(revenueGrowth.percentage)}% over the last 30 days.`,
+        impact: revenueGrowth.trend === 'increasing' ? 'positive' : 'negative',
+        priority: 'high',
+        actionable: true,
+        suggestedActions: revenueGrowth.trend === 'increasing'
+          ? ['Consider scaling successful revenue streams', 'Analyze what drove this growth']
+          : ['Investigate causes of revenue decline', 'Review and optimize pricing strategy'],
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    return insights;
+  }
+
+  // Generate spending recommendations
+  private generateSpendingRecommendations(transactions: Transaction[]): AIInsight[] {
+    const insights: AIInsight[] = [];
+
+    // Analyze spending by category
+    const categorySpending = this.analyzeCategorySpending(transactions);
+    const topSpendingCategory = Object.entries(categorySpending)
+      .sort(([, a], [, b]) => b - a)[0];
+
+    if (topSpendingCategory && topSpendingCategory[1] > 0) {
+      insights.push({
+        id: `spending-rec-${Date.now()}`,
+        type: 'recommendation',
+        title: 'Top Spending Category Analysis',
+        description: `${topSpendingCategory[0]} accounts for your highest expenses. Consider reviewing these costs for optimization opportunities.`,
+        impact: 'neutral',
+        priority: 'medium',
+        actionable: true,
+        suggestedActions: [
+          `Review all ${topSpendingCategory[0]} expenses for potential savings`,
+          'Compare costs with industry benchmarks',
+          'Negotiate better rates with vendors'
+        ],
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    return insights;
+  }
+
+  // Generate cash flow warnings
+  private generateCashFlowWarnings(transactions: Transaction[]): AIInsight[] {
+    const insights: AIInsight[] = [];
+
+    const currentBalance = this.calculateCurrentBalance(transactions);
+    if (currentBalance < 1000) { // Configurable threshold
+      insights.push({
+        id: `cashflow-warning-${Date.now()}`,
+        type: 'warning',
+        title: 'Low Cash Balance Alert',
+        description: 'Your current cash balance is below the recommended minimum. Consider reviewing upcoming expenses and income.',
+        impact: 'negative',
+        priority: 'high',
+        actionable: true,
+        suggestedActions: [
+          'Review upcoming bills and payments',
+          'Follow up on outstanding invoices',
+          'Consider short-term financing options if needed'
+        ],
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    return insights;
+  }
+
+  // Identify growth opportunities
+  private identifyOpportunities(transactions: Transaction[]): AIInsight[] {
+    const insights: AIInsight[] = [];
+
+    // Identify potential tax deductions
+    const businessExpenses = transactions.filter(t =>
+      t.type === 'expense' &&
+      ['Office Supplies', 'Professional Services', 'Travel', 'Equipment'].includes(t.category)
+    );
+
+    if (businessExpenses.length > 0) {
+      const totalDeductible = businessExpenses.reduce((sum, t) => sum + t.amount, 0);
+      insights.push({
+        id: `tax-opportunity-${Date.now()}`,
+        type: 'opportunity',
+        title: 'Tax Deduction Opportunity',
+        description: `You have $${totalDeductible.toFixed(2)} in potential business tax deductions. Ensure proper documentation for tax filing.`,
+        impact: 'positive',
+        priority: 'medium',
+        actionable: true,
+        suggestedActions: [
+          'Consult with a tax professional to confirm eligibility',
+          'Gather receipts and documentation for deductions'
+        ],
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    return insights;
+  }
+
+  // Analyze category spending
+  private analyzeCategorySpending(transactions: Transaction[]): Record<string, number> {
+    const categorySpending: Record<string, number> = {};
+
+    transactions.forEach(transaction => {
+      if (transaction.type === 'expense') {
+        const category = transaction.category || 'uncategorized';
+        categorySpending[category] = (categorySpending[category] || 0) + transaction.amount;
+      }
+    });
+
+    return categorySpending;
+  }
+
+  // Calculate revenue growth
+  private calculateRevenueGrowth(transactions: Transaction[]): { trend: 'increasing' | 'decreasing' | 'stable', percentage: number } {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+
+    const recentTransactions = transactions.filter(t => new Date(t.date) >= thirtyDaysAgo);
+    const revenue = recentTransactions
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const previousRevenue = transactions
+      .filter(t => new Date(t.date) >= new Date(thirtyDaysAgo.getTime() - 30 * 24 * 60 * 60 * 1000))
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const growth = (revenue - previousRevenue) / previousRevenue;
+    const trend = growth > 0.05 ? 'increasing' : growth < -0.05 ? 'decreasing' : 'stable';
+
+    return { trend, percentage: Math.round(growth * 100) };
+  }
+
+  // Calculate current balance from transactions
+  private calculateCurrentBalance(transactions: Transaction[]): number {
+    return transactions.reduce((balance, transaction) => {
+      if (transaction.type === 'income') {
+        return balance + transaction.amount;
+      } else {
+        return balance - transaction.amount;
+      }
+    }, 0);
+  }
+
+  // Calculate recent trend in income and expenses
+  private calculateRecentTrend(
+    transactions: Transaction[],
+    days: number = 30
+  ): { income: number; expenses: number; incomeTrend: number; expenseTrend: number } {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+
+    const recentTransactions = transactions.filter(t => new Date(t.date) >= cutoffDate);
+    const incomeData = recentTransactions
+      .filter(t => t.type === 'income')
+      .map(t => t.amount);
+    const expenseData = recentTransactions
+      .filter(t => t.type === 'expense')
+      .map(t => t.amount);
+
+    const incomeTrend = this.calculateLinearTrend(incomeData).slope;
+    const expenseTrend = this.calculateLinearTrend(expenseData).slope;
+
+    return {
+      income: this.calculateAverage(incomeData) || 0,
+      expenses: this.calculateAverage(expenseData) || 0,
+      incomeTrend: incomeTrend || 0,
+      expenseTrend: expenseTrend || 0
+    };
+  }
+
+  // Calculate linear regression for a dataset
+  private calculateLinearTrend(data: number[]): { slope: number; rSquared: number; direction: 'up' | 'down' | 'stable' } {
+    if (data.length < 2) {
+      return { slope: 0, rSquared: 0, direction: 'stable' };
+    }
+
+    const n = data.length;
+    let sumX = 0;
+    let sumY = 0;
+    let sumXY = 0;
+    let sumXX = 0;
+    let sumYY = 0;
+
+    for (let i = 0; i < n; i++) {
+      sumX += i;
+      sumY += data[i];
+      sumXY += i * data[i];
+      sumXX += i * i;
+      sumYY += data[i] * data[i];
+    }
+
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+
+    // Calculate R-squared (coefficient of determination)
+    const yMean = sumY / n;
+    let ssTot = 0;
+    let ssRes = 0;
+
+    for (let i = 0; i < n; i++) {
+      const y = data[i];
+      const yPred = slope * i + intercept;
+
+      ssTot += Math.pow(y - yMean, 2);
+      ssRes += Math.pow(y - yPred, 2);
+    }
+
+    const rSquared = 1 - (ssRes / ssTot);
+
+    // Determine direction
+    let direction: 'up' | 'down' | 'stable' = 'stable';
+    if (Math.abs(slope) > 0.0001) { // Threshold to consider it a trend
+      direction = slope > 0 ? 'up' : 'down';
+    }
+
+    return {
+      slope,
+      rSquared: isNaN(rSquared) ? 0 : Math.max(0, Math.min(1, rSquared)), // Clamp between 0 and 1
+      direction
+    };
+  }
+
+  // Calculate average of a dataset
+  private calculateAverage(data: number[]): number {
+    return data.reduce((sum, value) => sum + value, 0) / data.length;
+  }
+
+  // Calculate standard deviation of a dataset
+  private calculateStandardDeviation(data: number[]): number {
+    const mean = this.calculateAverage(data);
+    const squareDiffs = data.map(value => Math.pow(value - mean, 2));
+    return Math.sqrt(squareDiffs.reduce((a, b) => a + b, 0) / data.length);
+  }
+
+  // Calculate event adjustment for a given date
+  private calculateEventAdjustment(date: Date): { incomeMultiplier: number; expenseMultiplier: number } {
+    const dayOfWeek = date.getDay();
+    const dayOfMonth = date.getDate();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const isEndOfMonth = dayOfMonth >= 25; // Last week of the month
+
+    // Simple heuristics - can be enhanced with actual event data
+    return {
+    const anomalies: FinancialAnomaly[] = [];
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    
+    // Group transactions by amount and description
+    const transactionGroups = new Map<string, Transaction[]>();
+    
+    transactions.forEach(transaction => {
+      const key = `${transaction.amount}_${transaction.description?.toLowerCase()}`;
+      if (!transactionGroups.has(key)) {
+        transactionGroups.set(key, []);
+      }
+      transactionGroups.get(key)?.push(transaction);
+      seen.get(key)?.push(transaction);
+    });
+
+    // Find duplicates (transactions with same key and same day)
+    seen.forEach((group, key) => {
+      if (group.length > 1) {
+        // Only consider it a duplicate if it's the same type (income/expense)
+        const groupsByType = new Map<string, Transaction[]>();
+        group.forEach(t => {
+          const typeKey = t.type;
+          if (!groupsByType.has(typeKey)) {
+            groupsByType.set(typeKey, []);
+          }
+          groupsByType.get(typeKey)?.push(t);
+        });
+
+        // Check each type group for duplicates
+        groupsByType.forEach((typeGroup, type) => {
+          if (typeGroup.length > 1) {
+            anomalies.push({
+              id: `duplicate-${type}-${key}-${Date.now()}`,
+              type: 'duplicate',
+              severity: 'medium',
+              title: 'Possible Duplicate Transaction',
+              description: `Found ${typeGroup.length} similar ${type} transactions on the same day.`,
+              transactions: typeGroup,
+              suggestedAction: 'Review these transactions to ensure they are not duplicates.',
+              detectedAt: new Date().toISOString()
+            });
+          }
+        });
+      }
+    });
+
+    return anomalies;
+  }
+
+  // Predict daily income based on historical data
+  private predictDailyIncome(historicalData: any, dayOfWeek: number, dayOfMonth: number): number {
+    const dayIncomes = historicalData.dailyIncome?.[dayOfWeek] || [];
+    const monthIncomes = historicalData.monthlyIncome?.[dayOfMonth] || [];
+
+    if (dayIncomes.length > 0) {
+      return this.calculateAverage(dayIncomes);
+    } else if (monthIncomes.length > 0) {
+      return this.calculateAverage(monthIncomes);
+    } else {
+      return (historicalData.avgDailyIncome || 0) / 30; // Spread daily average
+    }
+  }
+
+  // Predict daily expenses based on historical data
+  private predictDailyExpenses(historicalData: any, dayOfWeek: number, dayOfMonth: number): number {
+    const dayExpenses = historicalData.dailyExpenses?.[dayOfWeek] || [];
+    const monthExpenses = historicalData.monthlyExpenses?.[dayOfMonth] || [];
+
+    if (dayExpenses.length > 0) {
+      return this.calculateAverage(dayExpenses);
+    } else if (monthExpenses.length > 0) {
+      return this.calculateAverage(monthExpenses);
+    } else {
+      return (historicalData.avgDailyExpenses || 0) / 30; // Spread daily average
+    }
+  }
+
+  // Calculate forecast confidence based on data quality and forecast horizon
+  private calculateForecastConfidence(
+    historicalData: any,
+    dayIndex: number,
+    forecastDays: number,
+    seasonalPatterns: any
+  ): 'high' | 'medium' | 'low' {
+    // Simple confidence calculation based on data quality and forecast horizon
+    const dataQuality = historicalData?.totalTransactions > 50 ? 1 :
+      historicalData?.totalTransactions > 20 ? 0.7 : 0.4;
+
+    // Confidence decreases as we forecast further into the future
+    const horizonFactor = 1 - (dayIndex / forecastDays);
+
+    // Consider seasonal strength
+    const month = new Date().getMonth();
+    const seasonalStrength = seasonalPatterns?.monthly?.[month] ?
+      Math.abs(seasonalPatterns.monthly[month] - 1) : 0.5;
+
+    const confidenceScore = (dataQuality * 0.5) + (horizonFactor * 0.3) + (seasonalStrength * 0.2);
+
+    if (confidenceScore > 0.7) return 'high';
+    if (confidenceScore > 0.4) return 'medium';
+    return 'low';
+  }
+
+  private detectUnusualSpending(transactions: Transaction[]): FinancialAnomaly[] {
+    const anomalies: FinancialAnomaly[] = [];
+    const expenses = transactions.filter(t => t.type === 'expense');
+    
+    if (expenses.length < 10) return anomalies; // Need sufficient data
+    
+    const amounts = expenses.map(t => t.amount);
+    const avgAmount = this.calculateAverage(amounts);
+    const stdDev = this.calculateStandardDeviation(amounts);
+    const threshold = avgAmount + (2 * stdDev); // 2 standard deviations
+    
+    const unusualTransactions = expenses.filter(t => t.amount > threshold);
+    
+    if (unusualTransactions.length > 0) {
+      anomalies.push({
+        id: `unusual-${Date.now()}`,
+        type: 'unusual_spending',
+        severity: 'medium',
+        title: 'Unusual Spending Detected',
+        description: `Found ${unusualTransactions.length} transactions significantly above your average spending pattern.`,
+        transactions: unusualTransactions,
+        suggestedAction: 'Review these transactions to ensure they are legitimate and properly categorized.',
+        detectedAt: new Date().toISOString()
+      });
+    }
+    
+    return anomalies;
+  }
+
+  private detectLargeTransactions(transactions: Transaction[]): FinancialAnomaly[] {
+    const anomalies: FinancialAnomaly[] = [];
+    const largeThreshold = 1000; // Configurable threshold
+    
+    const largeTransactions = transactions.filter(t => t.amount > largeThreshold);
+    
+    if (largeTransactions.length > 0) {
+      anomalies.push({
+        id: `large-${Date.now()}`,
+        type: 'large_transaction',
+        severity: 'low',
+        title: 'Large Transactions',
+        description: `Found ${largeTransactions.length} transactions over $${largeThreshold}.`,
+        transactions: largeTransactions,
+        suggestedAction: 'Verify these large transactions are properly documented and categorized.',
+        detectedAt: new Date().toISOString()
+      });
+    }
+    
+    return anomalies;
+  }
+
+  private detectCategorySpikes(transactions: Transaction[]): FinancialAnomaly[] {
+    const anomalies: FinancialAnomaly[] = [];
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentTransactions = transactions.filter(t => new Date(t.date) >= thirtyDaysAgo);
+    
+    // Group by category
+    const categorySpending: { [category: string]: number } = {};
+    const categoryTransactions: { [category: string]: Transaction[] } = {};
+    
+    recentTransactions.forEach(transaction => {
+      if (transaction.type === 'expense') {
+        const category = transaction.category || 'uncategorized';
+        categorySpending[category] = (categorySpending[category] || 0) + transaction.amount;
+        if (!categoryTransactions[category]) {
+          categoryTransactions[category] = [];
+        }
+        categoryTransactions[category].push(transaction);
+      }
+    });
+    
+    // Calculate average spending per category
+    const amounts = Object.values(categorySpending);
+    if (amounts.length < 3) return anomalies;
+    
+    const avgCategorySpending = this.calculateAverage(amounts);
+    if (avgCategorySpending <= 0) return anomalies; // Avoid division by zero
+    
+    const threshold = avgCategorySpending * 2; // 2x average
+    
+    Object.entries(categorySpending).forEach(([category, amount]) => {
+      if (amount > threshold) {
+        anomalies.push({
+          id: `spike-${category}-${Date.now()}`,
+          type: 'category_spike',
+          severity: 'medium',
+          title: `Spending Spike in ${category}`,
+          description: `Spending in ${category} is ${Math.round((amount / avgCategorySpending) * 100)}% above average this month.`,
+          transactions: categoryTransactions[category] || [],
+          suggestedAction: `Review ${category} expenses to identify the cause of increased spending.`,
+          detectedAt: new Date().toISOString()
+        });
+      }
+    });
+    
+    return anomalies;
+  }
+
+  private analyzeTrends(transactions: Transaction[]): AIInsight[] {
+    const insights: AIInsight[] = [];
+    
+    // Revenue trend analysis
+    const revenueGrowth = this.calculateRevenueGrowth(transactions);
+    if (revenueGrowth.trend !== 'stable') {
+      insights.push({
+        id: `revenue-trend-${Date.now()}`,
+        type: 'trend',
+        title: `Revenue ${revenueGrowth.trend === 'increasing' ? 'Growth' : 'Decline'} Detected`,
+        description: `Your revenue has ${revenueGrowth.trend === 'increasing' ? 'increased' : 'decreased'} by ${Math.abs(revenueGrowth.percentage)}% over the last 30 days.`,
+        impact: revenueGrowth.trend === 'increasing' ? 'positive' : 'negative',
+        priority: 'high',
+        actionable: true,
+        suggestedActions: revenueGrowth.trend === 'increasing' 
+          ? ['Consider scaling successful revenue streams', 'Analyze what drove this growth']
+          : ['Investigate causes of revenue decline', 'Review and optimize pricing strategy'],
+        createdAt: new Date().toISOString()
+      });
+    }
+    
+    return insights;
+  }
+
+  private generateSpendingRecommendations(transactions: Transaction[]): AIInsight[] {
+    const insights: AIInsight[] = [];
+    
+    // Analyze spending by category
+    const categorySpending = this.analyzeCategorySpending(transactions);
+    const topSpendingCategory = Object.entries(categorySpending)
+      .sort(([,a], [,b]) => b - a)[0];
+    
+    if (topSpendingCategory && topSpendingCategory[1] > 0) {
+      insights.push({
+        id: `spending-rec-${Date.now()}`,
+        type: 'recommendation',
+        title: 'Top Spending Category Analysis',
+        description: `${topSpendingCategory[0]} accounts for your highest expenses. Consider reviewing these costs for optimization opportunities.`,
+        impact: 'neutral',
+        priority: 'medium',
+        actionable: true,
+        suggestedActions: [
+          `Review all ${topSpendingCategory[0]} expenses for potential savings`,
+          'Compare costs with industry benchmarks',
+          'Negotiate better rates with vendors'
+        ],
+        createdAt: new Date().toISOString()
+      });
+    }
+    
+    return insights;
+  }
+
+  private generateCashFlowWarnings(transactions: Transaction[]): AIInsight[] {
+    const insights: AIInsight[] = [];
+    
+    const currentBalance = this.calculateCurrentBalance(transactions);
+    if (currentBalance < 1000) { // Configurable threshold
+      insights.push({
+        id: `cashflow-warning-${Date.now()}`,
+        type: 'warning',
+        title: 'Low Cash Balance Alert',
+        description: 'Your current cash balance is below the recommended minimum. Consider reviewing upcoming expenses and income.',
+        impact: 'negative',
+        priority: 'high',
+        actionable: true,
+        suggestedActions: [
+          'Review upcoming bills and payments',
+          'Follow up on outstanding invoices',
+          'Consider short-term financing options if needed'
+        ],
+        createdAt: new Date().toISOString()
+      });
+    }
+    
+    return insights;
+  }
+
+  private identifyOpportunities(transactions: Transaction[]): AIInsight[] {
+    const insights: AIInsight[] = [];
+    
+    // Identify potential tax deductions
+    const businessExpenses = transactions.filter(t => 
+      t.type === 'expense' && 
+      ['Office Supplies', 'Professional Services', 'Travel', 'Equipment'].includes(t.category)
+    );
+    
+    if (businessExpenses.length > 0) {
+      const totalDeductible = businessExpenses.reduce((sum, t) => sum + t.amount, 0);
+      insights.push({
+        id: `tax-opportunity-${Date.now()}`,
+        type: 'opportunity',
+        title: 'Tax Deduction Opportunity',
+        description: `You have $${totalDeductible.toFixed(2)} in potential business tax deductions. Ensure proper documentation for tax filing.`,
+        impact: 'positive',
+        priority: 'medium',
+        actionable: true,
+        suggestedActions: [
+          'Organize receipts and documentation',
+          'Consult with a tax professional',
+          'Review expense categorization for accuracy'
+        ],
+        createdAt: new Date().toISOString()
+      });
+    }
+    
+    return insights;
+  }
+
+  // Utility methods
+  private calculateAverage(numbers: number[]): number {
+    if (!numbers || numbers.length === 0) return 0;
+    const sum = numbers.reduce((sum, num) => sum + (Number(num) || 0), 0);
+    return sum / numbers.length;
+  }
+  
+  private calculateStandardDeviation(numbers: number[]): number {
+    if (!numbers || numbers.length === 0) return 0;
+    const avg = this.calculateAverage(numbers);
+    const squareDiffs = numbers.map(num => Math.pow(num - avg, 2));
+    return Math.sqrt(this.calculateAverage(squareDiffs));
+  }
+
+  private calculateRevenueGrowth(transactions: Transaction[]) {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+    
+    const recentRevenue = transactions
+      .filter(t => t.type === 'income' && new Date(t.date) >= thirtyDaysAgo)
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const previousRevenue = transactions
+      .filter(t => t.type === 'income' && new Date(t.date) >= sixtyDaysAgo && new Date(t.date) < thirtyDaysAgo)
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    if (previousRevenue === 0) {
+      return { trend: 'stable' as const, percentage: 0 };
+    }
+    
+    const growthPercentage = ((recentRevenue - previousRevenue) / previousRevenue) * 100;
+    
+    if (Math.abs(growthPercentage) < 5) {
+      return { trend: 'stable' as const, percentage: growthPercentage };
+    } else if (growthPercentage > 0) {
+      return { trend: 'increasing' as const, percentage: growthPercentage };
+    } else {
+      return { trend: 'decreasing' as const, percentage: growthPercentage };
+    }
+  }
+
+  private analyzeCategorySpending(transactions: Transaction[]): Record<string, number> {
+    const categorySpending: Record<string, number> = {};
+    
+    transactions
+      .filter(t => t.type === 'expense' && t.category)
+      .forEach(transaction => {
+        const category = transaction.category as string;
+        categorySpending[category] = (categorySpending[category] || 0) + transaction.amount;
+      });
+    
+    return categorySpending;
+  }
+
+  // Predict daily income based on historical patterns
+  private predictDailyIncome(historicalData: any, dayOfWeek: number, dayOfMonth: number): number {
+    const dailyAvg = historicalData.dailyIncome[dayOfWeek]?.length > 0 ?
+      this.calculateAverage(historicalData.dailyIncome[dayOfWeek]) :
+      historicalData.avgDailyIncome;
+    
+    const monthlyAvg = historicalData.monthlyIncome[dayOfMonth]?.length > 0 ?
+      this.calculateAverage(historicalData.monthlyIncome[dayOfMonth]) :
+      historicalData.avgDailyIncome;
+    
+    // Weighted average of daily and monthly patterns
+    return (dailyAvg * 0.6) + (monthlyAvg * 0.4);
+  }
+
+  // Predict daily expenses based on historical patterns
+  private predictDailyExpenses(historicalData: any, dayOfWeek: number, dayOfMonth: number): number {
+    const dailyAvg = historicalData.dailyExpenses[dayOfWeek]?.length > 0 ?
+      this.calculateAverage(historicalData.dailyExpenses[dayOfWeek]) :
+      historicalData.avgDailyExpenses;
+    
+    const monthlyAvg = historicalData.monthlyExpenses[dayOfMonth]?.length > 0 ?
+      this.calculateAverage(historicalData.monthlyExpenses[dayOfMonth]) :
+      historicalData.avgDailyExpenses;
+    
+    // Weighted average of daily and monthly patterns
+    return (dailyAvg * 0.6) + (monthlyAvg * 0.4);
+  }
+
+}
+
+export const aiFinancialAssistant = AIFinancialAssistant.getInstance();

@@ -2,12 +2,28 @@
 
 Secure, offline-first bookkeeping designed for small businesses. Your financial data is encrypted client-side and stored locally, ensuring complete privacy and security.
 
-## Features
+## ✨ Features
 
-- **Privacy First**: Automatic encryption using your account credentials
-- **Offline Ready**: Works completely offline with optional cloud sync
-- **Comprehensive**: Track transactions, products, services, and generate reports
-- **Fast & Secure**: Built with modern web technologies for optimal performance
+Uzaji is a powerful, offline-first bookkeeping application with a focus on security and privacy. It offers a comprehensive suite of tools for businesses of all sizes.
+
+### Core Features
+- **Privacy First & Offline Ready**: Your data is encrypted client-side and stored locally for complete privacy and offline access.
+- **Dashboard**: Get a real-time overview of your business's financial health.
+- **Transaction Management**: Track income, expenses, and attach files securely.
+- **Products & Services**: Manage your offerings for streamlined invoicing.
+
+### Uzaji Pro Features
+- **Professional Invoicing**: Create, send, and manage the full lifecycle of customer invoices.
+- **Bill Management**: Track and manage vendor bills to stay on top of your payables.
+- **Banking Module**: Manage multiple bank/cash accounts and record transfers between them.
+- **Core Financial Reports**: Generate essential reports like Profit & Loss, Balance Sheet, and Trial Balance.
+- **Client File Tracker (for Legal Firms)**: A specialized module for law firms to manage client and case-file financials.
+
+### AI-Powered Insights & Advanced Reporting
+- **AI Financial Assistant**: Get AI-driven insights into your business.
+- **Cash Flow Forecasting**: Predict future cash flow based on historical data.
+- **Anomaly Detection**: Receive alerts for duplicate transactions or unusual spending patterns.
+- **Advanced Reports**: Dive deeper with reports like 'Sales by Customer' and 'Expenses by Category'.
 
 ## Supabase Setup
 

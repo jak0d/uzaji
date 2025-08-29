@@ -14,8 +14,8 @@ interface AuthPageProps {
 }
 
 export function AuthPage({ onLogin, onSignup, onGoogleAuth, onBack, isOpen }: AuthPageProps) {
-  const { t } = useTranslation();
-  const { getThemeClasses } = useSettings();
+  const { settings, getThemeClasses } = useSettings();
+  const { t } = useTranslation(settings.language);
   const themeClasses = getThemeClasses();
   
   const [isLoginMode, setIsLoginMode] = useState(true);

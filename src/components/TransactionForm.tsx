@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, Save, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { addTransaction } from '../utils/database';
@@ -7,15 +7,16 @@ import { UzajiLogo } from './UzajiLogo';
 import { useSettings } from '../hooks/useSettings';
 import { useTranslation } from '../hooks/useTranslation';
 import { trackBusiness, trackFeature } from '../utils/analytics';
-import type { Product, Service } from '../utils/database';
+import { getAccounts } from '../utils/database';
+import type { Product, Service, Account } from '../utils/database';
 
 interface TransactionFormProps {
-  onBack: () => void;
+  transactionToEdit?: Transaction | null;
 }
 
-export function TransactionForm({ onBack }: TransactionFormProps) {
-  const { formatCurrency, getThemeClasses } = useSettings();
-  const { t } = useTranslation();
+export function TransactionForm({ transactionToEdit }: TransactionFormProps) {
+  const { settings, formatCurrency, getThemeClasses } = useSettings();
+  const { t } = useTranslation(settings.language);
   const themeClasses = getThemeClasses();
   const navigate = useNavigate();
   
@@ -25,10 +26,12 @@ export function TransactionForm({ onBack }: TransactionFormProps) {
     type: 'income' as 'income' | 'expense',
     category: '',
     productId: '',
+    account: '',
     date: new Date().toISOString().split('T')[0],
   });
   const [products, setProducts] = useState<Product[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -38,21 +41,31 @@ export function TransactionForm({ onBack }: TransactionFormProps) {
   };
 
   useEffect(() => {
-    loadProductsAndServices();
+    loadInitialData();
     // Track page view
     trackFeature('transactions', 'form_view');
   }, []);
 
-  const loadProductsAndServices = async () => {
+  const loadInitialData = async () => {
     try {
-      const [productsData, servicesData] = await Promise.all([
+      const [productsData, servicesData, accountsData] = await Promise.all([
         getProducts(),
         getServices(),
+        getAccounts(),
       ]);
       setProducts(productsData);
       setServices(servicesData);
+      setAccounts(accountsData);
+
+      if (accountsData.length > 0) {
+        const defaultAccount = accountsData.find(acc => acc.isDefault);
+        setFormData(prev => ({
+          ...prev,
+          account: defaultAccount ? defaultAccount.id : accountsData[0].id,
+        }));
+      }
     } catch (error) {
-      console.error('Failed to load products and services:', error);
+      console.error('Failed to load initial data for transaction form:', error);
     }
   };
 
@@ -67,6 +80,7 @@ export function TransactionForm({ onBack }: TransactionFormProps) {
         type: formData.type,
         category: formData.category,
         productId: formData.productId || undefined,
+        account: formData.account,
         date: formData.date,
         encrypted: true,
       });
@@ -251,6 +265,28 @@ export function TransactionForm({ onBack }: TransactionFormProps) {
                 {categories[formData.type].map((category) => (
                   <option key={category} value={category}>
                     {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="account" className={`block text-sm font-medium ${themeClasses.text} mb-2`}>
+                {t('transactions.account')}
+              </label>
+              <select
+                id="account"
+                value={formData.account}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, account: e.target.value }));
+                  trackFeature('transactions', 'account_selected');
+                }}
+                className={`w-full px-4 py-3 ${themeClasses.border} border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${themeClasses.cardBackground} ${themeClasses.text}`}
+                required
+              >
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name} ({formatCurrency(account.balance)})
                   </option>
                 ))}
               </select>

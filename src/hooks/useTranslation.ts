@@ -1,11 +1,8 @@
-import { useSettings } from './useSettings';
 import { getTranslation } from '../utils/translations';
 
-export function useTranslation() {
-  const { settings } = useSettings();
-
+export function useTranslation(language: string) {
   const t = (key: string): string => {
-    return getTranslation(key, settings.language);
+    return getTranslation(key, language);
   };
 
   return { t };

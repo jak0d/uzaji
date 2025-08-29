@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
-import { getDashboardMetrics } from '../utils/database';
+import { getDashboardMetrics } from '../utils/dashboardUtils';
 
 interface DashboardMetrics {
   netIncome: number;
@@ -180,7 +180,10 @@ export function MetricsBar({ businessType, onRefresh, className = '' }: MetricsB
   const loadMetrics = async () => {
     try {
       setError(null);
-      const data = await getDashboardMetrics();
+            const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(endDate.getDate() - 30);
+      const data = await getDashboardMetrics(startDate, endDate);
       setMetrics(data);
       setLastUpdated(new Date());
     } catch (err) {

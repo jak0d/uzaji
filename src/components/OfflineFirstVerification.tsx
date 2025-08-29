@@ -1,21 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Wifi,
   WifiOff,
   Database,
   CheckCircle,
   XCircle,
-  AlertTriangle,
   RefreshCw,
   Play,
-  Pause,
-  Download,
-  Upload,
   HardDrive,
-  Cloud,
   Shield,
   Zap,
-  Activity,
   Clock
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
@@ -23,12 +17,12 @@ import {
   initDB, 
   addTransaction, 
   getTransactions, 
-  getDashboardMetrics,
   addProduct,
   getProducts,
   addBusinessConfig,
   getBusinessConfig
 } from '../utils/database';
+import { getDashboardMetrics } from '../utils/dashboardUtils';
 
 interface OfflineTest {
   id: string;
@@ -53,8 +47,7 @@ export function OfflineFirstVerification({ className = '' }: OfflineFirstVerific
   const [isRunning, setIsRunning] = useState(false);
   const [overallStatus, setOverallStatus] = useState<'pending' | 'passed' | 'failed'>('pending');
   const [dbSize, setDbSize] = useState<number>(0);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
-
+  
   // Initialize tests
   useEffect(() => {
     initializeTests();
@@ -187,7 +180,7 @@ export function OfflineFirstVerification({ className = '' }: OfflineFirstVerific
 
       case 'transaction-crud':
         // Test transaction operations
-        const transactionId = await addTransaction({
+                const transactionId = await addTransaction({
           type: 'income',
           amount: 100,
           description: 'Test transaction',
@@ -195,7 +188,8 @@ export function OfflineFirstVerification({ className = '' }: OfflineFirstVerific
           date: new Date().toISOString().split('T')[0],
           account: 'test-account',
           attachments: [],
-          tags: ['test']
+          tags: ['test'],
+          encrypted: false
         });
         
         const transactions = await getTransactions();
@@ -210,13 +204,12 @@ export function OfflineFirstVerification({ className = '' }: OfflineFirstVerific
 
       case 'product-crud':
         // Test product operations
-        const productId = await addProduct({
+                const productId = await addProduct({
           name: 'Test Product',
           description: 'Test product description',
           price: 50,
           category: 'Test Category',
-          isService: false,
-          isActive: true
+          encrypted: false
         });
         
         const products = await getProducts();
@@ -231,16 +224,16 @@ export function OfflineFirstVerification({ className = '' }: OfflineFirstVerific
 
       case 'business-config':
         // Test business configuration
-        await addBusinessConfig({
-          businessName: 'Test Business',
-          businessType: 'general',
-          ownerName: 'Test Owner',
-          email: 'test@example.com',
-          phone: '123-456-7890',
-          address: 'Test Address',
-          currency: 'USD',
-          dateFormat: 'MM/DD/YYYY',
-          fiscalYearStart: '01-01'
+                await addBusinessConfig({
+          type: 'general',
+          name: 'Test Business',
+          setupComplete: true,
+          onboardingDate: new Date().toISOString(),
+          defaultCategories: [],
+          accounts: [],
+          uiPreferences: { dashboardLayout: 'standard', compactView: false, defaultTransactionType: 'income', showProFeatures: false },
+          encrypted: false,
+          currency: 'USD'
         });
         
         const config = await getBusinessConfig();
@@ -251,9 +244,12 @@ export function OfflineFirstVerification({ className = '' }: OfflineFirstVerific
         test.result = 'Business configuration saved and retrieved successfully';
         break;
 
-      case 'metrics-calculation':
+            case 'metrics-calculation':
         // Test metrics calculation
-        const metrics = await getDashboardMetrics();
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(endDate.getDate() - 30);
+        const metrics = await getDashboardMetrics(startDate, endDate);
         if (typeof metrics.totalRevenue !== 'number' || typeof metrics.totalExpenses !== 'number') {
           throw new Error('Metrics calculation failed');
         }
@@ -274,8 +270,7 @@ export function OfflineFirstVerification({ className = '' }: OfflineFirstVerific
         break;
 
       case 'offline-ui':
-        // Test UI functionality (simulate offline state)
-        const originalOnline = navigator.onLine;
+                // Test UI functionality (simulate offline state)
         // Note: We can't actually change navigator.onLine, but we can test UI components
         test.result = 'UI components functional in offline mode';
         break;
@@ -310,7 +305,7 @@ export function OfflineFirstVerification({ className = '' }: OfflineFirstVerific
         
         // Simulate multiple database operations
         for (let i = 0; i < 10; i++) {
-          await addTransaction({
+                    await addTransaction({
             type: 'expense',
             amount: Math.random() * 100,
             description: `Performance test transaction ${i}`,
@@ -318,7 +313,8 @@ export function OfflineFirstVerification({ className = '' }: OfflineFirstVerific
             date: new Date().toISOString().split('T')[0],
             account: 'test-account',
             attachments: [],
-            tags: ['performance-test']
+            tags: ['performance-test'],
+            encrypted: false
           });
         }
         
@@ -404,13 +400,11 @@ export function OfflineFirstVerification({ className = '' }: OfflineFirstVerific
         return 'border-red-200 bg-red-50 dark:bg-red-900/20';
       case 'running':
         return 'border-blue-200 bg-blue-50 dark:bg-blue-900/20';
-      default:
         return 'border-gray-200 bg-gray-50 dark:bg-gray-800';
     }
   };
 
   const passedTests = tests.filter(t => t.status === 'passed').length;
-  const failedTests = tests.filter(t => t.status === 'failed').length;
   const totalTests = tests.length;
 
   return (

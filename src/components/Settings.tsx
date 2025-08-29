@@ -20,7 +20,7 @@ interface SettingsProps {
 
 export function Settings({ onBack, user, onLogout }: SettingsProps) {
   const { settings, updateSettings, formatCurrency, getThemeClasses } = useSettings();
-  const { t } = useTranslation();
+  const { t } = useTranslation(settings.language);
   const themeClasses = getThemeClasses();
   const navigate = useNavigate();
   

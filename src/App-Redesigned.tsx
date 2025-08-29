@@ -19,11 +19,12 @@ import { ComprehensiveTest } from './components/ComprehensiveTest';
 import { OfflineFirstVerification } from './components/OfflineFirstVerification';
 import { DeploymentReadiness } from './components/DeploymentReadiness';
 import { SupabaseVerification } from './components/SupabaseVerification';
+import { TransactionForm } from './components/TransactionForm';
 import { AuthPage } from './components/AuthPage';
 import { LandingPage } from './components/LandingPage';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { Sitemap } from './components/Sitemap';
-import { OnboardingFlow } from './components/OnboardingFlow';
+import { OnboardingWizard } from './components/OnboardingWizard';
 import { useAuth } from './hooks/useAuth';
 import { useAnalytics } from './hooks/useAnalytics';
 import { initDB, needsOnboarding } from './utils/database';
@@ -228,20 +229,25 @@ function AppContent() {
       <Route 
         path="/onboarding" 
         element={
-          isAuthenticated ? 
-            <Route index element={
-              showOnboarding ? 
-                <OnboardingFlow onComplete={() => setShowOnboarding(false)} /> : 
-                <RedesignedDashboard 
-                  onNavigate={(view: string) => {
-                    trackNavigation('dashboard_navigation', view);
-                    navigate(`/${view}`);
-                  }} 
-                  user={user} 
-                  onLogout={logout}
-                />
-            } /> : 
+          isAuthenticated ? (
+            showOnboarding ? 
+              <div className="min-h-screen bg-gray-50 flex flex-col">
+                <div className="flex-1 flex items-center justify-center p-4">
+                  <OnboardingWizard 
+                    businessType="general"
+                    onComplete={handleOnboardingComplete}
+                    onBack={() => {
+                      setShowOnboarding(false);
+                      navigate('/dashboard');
+                    }}
+                    isOpen={true}
+                  />
+                </div>
+              </div> : 
+              <Navigate to="/dashboard" replace />
+          ) : (
             <Navigate to="/" replace />
+          )
         } 
       />
 
@@ -272,7 +278,7 @@ function AppContent() {
           path="transactions" 
           element={
             <TransactionsTable 
-              onAddTransaction={() => navigate('/dashboard')} 
+              onAddTransaction={() => navigate('/transactions/new')} 
             />
           } 
         />
@@ -300,6 +306,14 @@ function AppContent() {
           <Route path="deployment" element={<DeploymentReadiness />} />
           <Route path="supabase" element={<SupabaseVerification />} />
         </Route>
+        <Route 
+          path="transactions/new" 
+          element={
+            <TransactionForm 
+              onBack={() => navigate('/transactions')} 
+            />
+          } 
+        />
         
         {/* Catch all for authenticated users - redirect to dashboard */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

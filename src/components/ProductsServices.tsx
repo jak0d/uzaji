@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Package, Clock, Edit2, Trash2, ChevronDown, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, ArrowLeft, Package, Clock, X, Trash2, Edit2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getProducts, getServices, addProduct, addService, deleteProduct, deleteService } from '../utils/database';
 import { UzajiLogo } from './UzajiLogo';
@@ -7,9 +7,7 @@ import { useSettings } from '../hooks/useSettings';
 import { useTranslation } from '../hooks/useTranslation';
 import type { Product, Service } from '../utils/database';
 
-interface ProductsServicesProps {
-  onBack: () => void;
-}
+interface ProductsServicesProps {}
 
 interface CategoryWithSubs {
   name: string;
@@ -23,9 +21,9 @@ interface CustomCategory {
   type: 'product' | 'service';
 }
 
-export function ProductsServices({ onBack }: ProductsServicesProps) {
-  const { formatCurrency, getThemeClasses } = useSettings();
-  const { t } = useTranslation();
+export function ProductsServices() {
+  const { settings, formatCurrency, getThemeClasses } = useSettings();
+  const { t } = useTranslation(settings.language);
   const themeClasses = getThemeClasses();
   const navigate = useNavigate();
   

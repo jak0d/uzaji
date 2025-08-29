@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   Home, 
   Receipt, 
-  TrendingUp, 
   ShoppingCart, 
   Package, 
   Settings, 
@@ -12,12 +11,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Lock,
-  Zap
+  Users,
+  FileText,
+  TrendingUp
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { UzajiLogo } from './UzajiLogo';
 import { useSettings } from '../hooks/useSettings';
 import { getBusinessType } from '../utils/businessConfig';
+
+type BusinessType = 'general' | 'legal';
 
 interface NavigationItem {
   id: string;
@@ -27,7 +30,7 @@ interface NavigationItem {
   enabled: boolean;
   badge?: string;
   tooltip?: string;
-  businessTypes?: ('general' | 'legal')[];
+  businessTypes?: BusinessType[];
 }
 
 interface SidebarProps {
@@ -38,7 +41,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, onToggle, onNavigate, className = '' }: SidebarProps) {
-  const { settings, getThemeClasses } = useSettings();
+  const { getThemeClasses } = useSettings();
   const themeClasses = getThemeClasses();
   const location = useLocation();
   const [businessType, setBusinessType] = useState<'general' | 'legal'>('general');
@@ -59,6 +62,7 @@ export function Sidebar({ isOpen, onToggle, onNavigate, className = '' }: Sideba
     }
   };
 
+  // Initialize with common navigation items
   const navigationItems: NavigationItem[] = [
     {
       id: 'dashboard',
@@ -75,23 +79,50 @@ export function Sidebar({ isOpen, onToggle, onNavigate, className = '' }: Sideba
       route: '/transactions',
       enabled: true,
       businessTypes: ['general', 'legal']
-    },
-    {
-      id: 'sales',
-      label: businessType === 'legal' ? 'Clients & Files' : 'Sales',
-      icon: TrendingUp,
-      route: businessType === 'legal' ? '/clients' : '/sales',
+    }
+  ];
+  
+  // Add business type specific navigation items
+  if (businessType === 'legal') {
+    navigationItems.push({
+      id: 'clients',
+      label: 'Clients & Files',
+      icon: Users,
+      route: '/clients',
       enabled: true,
-      businessTypes: ['general', 'legal']
-    },
-    {
-      id: 'purchases',
-      label: businessType === 'legal' ? 'Vendor Bills' : 'Purchases',
-      icon: ShoppingCart,
-      route: '/purchases',
-      enabled: true,
-      businessTypes: ['general', 'legal']
-    },
+      businessTypes: ['legal']
+    });
+  } else {
+    navigationItems.push(
+      {
+        id: 'sales',
+        label: 'Sales',
+        icon: TrendingUp,
+        route: '/sales',
+        enabled: true,
+        businessTypes: ['general']
+      },
+      {
+        id: 'invoices',
+        label: 'Invoices',
+        icon: FileText,
+        route: '/invoices',
+        enabled: true,
+        businessTypes: ['general']
+      },
+      {
+        id: 'purchases',
+        label: 'Purchases',
+        icon: ShoppingCart,
+        route: '/purchases',
+        enabled: true,
+        businessTypes: ['general']
+      }
+    );
+  }
+  
+  // Add common navigation items
+  navigationItems.push(
     {
       id: 'products',
       label: businessType === 'legal' ? 'Services' : 'Products & Services',
@@ -124,7 +155,7 @@ export function Sidebar({ isOpen, onToggle, onNavigate, className = '' }: Sideba
       enabled: true,
       businessTypes: ['general', 'legal']
     }
-  ];
+  );
 
   const filteredItems = navigationItems.filter(item => 
     !item.businessTypes || item.businessTypes.includes(businessType)
@@ -254,28 +285,23 @@ export function Sidebar({ isOpen, onToggle, onNavigate, className = '' }: Sideba
         {/* Pro Features Promotion */}
         {!isCollapsed && (
           <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
               <div className="flex items-start space-x-3">
-                <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Zap className="w-4 h-4 text-white" />
+                <div className="w-8 h-8 bg-gradient-to-r from-green-600 to-emerald-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Lock className="w-3.5 h-3.5 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-purple-900 dark:text-purple-100 text-sm mb-1">
-                    Unlock Pro Features
+                  <h4 className="font-semibold text-green-900 dark:text-green-100 text-sm mb-1">
+                    All Features Unlocked
                   </h4>
-                  <p className="text-purple-800 dark:text-purple-200 text-xs mb-3">
+                  <p className="text-green-800 dark:text-green-200 text-xs mb-3">
                     {businessType === 'legal' 
-                      ? 'Get client billing, case tracking, and professional invoicing.'
-                      : 'Access advanced invoicing, inventory, and reporting tools.'
+                      ? 'Enjoy full access to client billing, case tracking, and professional invoicing.'
+                      : 'Full access to all features including invoicing, inventory, and reporting tools.'
                     }
                   </p>
-                  <div className="flex flex-wrap gap-1">
-                    <span className="text-xs bg-purple-100 dark:bg-purple-800 text-purple-800 dark:text-purple-200 px-2 py-1 rounded-full">
-                      Invoicing
-                    </span>
-                    <span className="text-xs bg-purple-100 dark:bg-purple-800 text-purple-800 dark:text-purple-200 px-2 py-1 rounded-full">
-                      {businessType === 'legal' ? 'Client Billing' : 'Inventory'}
-                    </span>
+                  <div className="text-xs font-medium text-green-700 dark:text-green-300 text-center py-2">
+                    All Features Active
                   </div>
                 </div>
               </div>

@@ -23,6 +23,8 @@ import { cn } from '../utils/tailwind-utils';
 import { DateRangePicker } from './DateRangePicker';
 import { MetricCard } from './MetricCard';
 import { SkeletonLoader } from './SkeletonLoader';
+import { getDashboardMetrics, getRecentTransactions, getChartData } from '../utils/dashboardUtils';
+import { AIInsightsDashboard } from './AIInsightsDashboard';
 
 // Register ChartJS components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Title, Tooltip, Legend);
@@ -104,108 +106,32 @@ export function RedesignedDashboard({
   });
   
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
-  const [chartData, setChartData] = useState({
-    labels: [] as string[],
-    income: [] as number[],
-    expenses: [] as number[],
+  const [chartData, setChartData] = useState<any>({
+    labels: [],
+    datasets: [],
   });
 
   // Fetch data from IndexedDB
   const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
-      const db = await getDB();
-      const tx = db.transaction(['transactions'], 'readonly');
-      const transactionStore = tx.objectStore('transactions');
       
-      // Get all transactions within date range
-      const allTransactions = await transactionStore.getAll();
-      const transactions = allTransactions.filter(tx => {
-        const txDate = new Date(tx.date);
-        return txDate >= dateRange.start && txDate <= dateRange.end;
-      }) as Transaction[];
+      const { start, end } = dateRange;
 
-      // Calculate metrics
-      const calculatedMetrics = transactions.reduce<DashboardMetrics>((acc, tx) => {
-        if (tx.type === 'income') {
-          acc.totalRevenue += tx.amount;
-          acc.netIncome += tx.amount;
-          if (tx.status !== 'completed') {
-            acc.accountsReceivable += tx.amount;
-          }
-        } else {
-          acc.totalExpenses += tx.amount;
-          acc.netIncome -= tx.amount;
-          if (tx.status !== 'completed') {
-            acc.accountsPayable += tx.amount;
-          }
-        }
-        return acc;
-      }, { 
-        ...metrics,
-        totalRevenue: 0,
-        totalExpenses: 0,
-        netIncome: 0,
-        accountsReceivable: 0,
-        accountsPayable: 0,
-        incomeChange: 12.5, // Mock data
-        expenseChange: -5.2, // Mock data
-        profitMargin: 0,
-      });
+      // Fetch all data in parallel
+      const [metricsData, transactionsData, chartDataForPeriod] = await Promise.all([
+        getDashboardMetrics(start, end),
+        getRecentTransactions(start, end, 5),
+        getChartData(start, end)
+      ]);
 
-      // Calculate profit margin
-      calculatedMetrics.profitMargin = calculatedMetrics.totalRevenue > 0 
-        ? (calculatedMetrics.netIncome / calculatedMetrics.totalRevenue) * 100 
-        : 0;
+      setMetrics(metricsData);
+      setRecentTransactions(transactionsData);
+      setChartData(chartDataForPeriod);
 
-      setMetrics(calculatedMetrics);
-
-      // Prepare chart data
-      const days = Math.ceil((dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24)) || 1;
-      const labels = [];
-      const incomeData = new Array(days).fill(0);
-      const expensesData = new Array(days).fill(0);
-      const categoryMap = new Map<string, number>();
-
-      // Process transactions for charts
-      transactions.forEach(tx => {
-        const txDate = new Date(tx.date);
-        const dayIndex = Math.floor((txDate.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24));
-        
-        if (dayIndex >= 0 && dayIndex < days) {
-          if (tx.type === 'income') {
-            incomeData[dayIndex] = (incomeData[dayIndex] || 0) + tx.amount;
-          } else {
-            expensesData[dayIndex] = (expensesData[dayIndex] || 0) + tx.amount;
-            // Track categories for expenses
-            const category = tx.category || 'Uncategorized';
-            categoryMap.set(category, (categoryMap.get(category) || 0) + tx.amount);
-          }
-        }
-      });
-
-      // Generate date labels
-      for (let i = 0; i < days; i++) {
-        const date = new Date(dateRange.start);
-        date.setDate(date.getDate() + i);
-        labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-      }
-
-      setChartData({
-        labels,
-        income: incomeData,
-        expenses: expensesData.map(exp => Math.abs(exp))
-      });
-
-      // Get recent transactions (last 5)
-      const recent = [...transactions]
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .slice(0, 5);
-      
-      setRecentTransactions(recent);
-      
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      // Optionally, set an error state to show in the UI
     } finally {
       setIsLoading(false);
     }
@@ -508,6 +434,9 @@ export function RedesignedDashboard({
           </div>
         )}
       </div>
+
+      {/* AI Insights Section */}
+      <AIInsightsDashboard />
     </div>
   );
 }

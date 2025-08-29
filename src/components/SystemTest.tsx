@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   CheckCircle, 
   XCircle, 
@@ -18,10 +18,9 @@ import {
   addTransaction, 
   getProducts, 
   getServices,
-  getDashboardMetrics,
-  needsOnboarding,
-  getBusinessConfig
+  needsOnboarding
 } from '../utils/database';
+import { getDashboardMetrics } from '../utils/dashboardUtils';
 import { getCurrentBusinessConfig } from '../utils/businessConfig';
 import { encryption } from '../utils/encryption';
 
@@ -164,7 +163,10 @@ export function SystemTest({ className = '' }: SystemTestProps) {
     try {
       const products = await getProducts();
       const services = await getServices();
-      const metrics = await getDashboardMetrics();
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(endDate.getDate() - 30);
+      const metrics = await getDashboardMetrics(startDate, endDate);
       
       const hasBasicData = typeof metrics.totalRevenue === 'number' && 
                           typeof metrics.totalExpenses === 'number' &&

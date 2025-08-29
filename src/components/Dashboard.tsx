@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { DollarSign, TrendingUp, TrendingDown, BarChart3, Plus, Package, Settings, Wifi, WifiOff, LogOut, User as UserIcon, Calendar, Filter, Info, Cloud } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { DollarSign, TrendingUp, TrendingDown, BarChart3, Plus, Package, Settings, Wifi, WifiOff, LogOut, User as UserIcon, Calendar, Filter, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getTransactionsByDateRange, getSetting } from '../utils/database';
 import { syncService } from '../utils/sync';
@@ -17,7 +17,6 @@ interface DashboardStats {
 }
 
 interface DashboardProps {
-  onNavigate: (view: string) => void;
   user: User | null;
   onLogout: () => void;
 }
@@ -34,9 +33,9 @@ interface ImportInfo {
   };
 }
 
-export function Dashboard({ onNavigate, user, onLogout }: DashboardProps) {
+export function Dashboard({ user, onLogout }: DashboardProps) {
   const { settings, formatCurrency, formatDate, getThemeClasses } = useSettings();
-  const { t } = useTranslation();
+  const { t } = useTranslation(settings.language);
   const themeClasses = getThemeClasses();
   const navigate = useNavigate();
   

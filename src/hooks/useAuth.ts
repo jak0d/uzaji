@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { encryption } from '../utils/encryption';
 import { supabaseHelpers } from '../utils/supabase';
+import { initializeNewBusiness } from '../utils/businessInit';
 
 export interface User {
   id: string;
@@ -336,6 +337,14 @@ export function useAuth(): AuthState {
         isSupabaseUser: false
       };
 
+      // Initialize default business configuration
+      try {
+        await initializeNewBusiness(name);
+      } catch (error) {
+        console.error('Failed to initialize business configuration:', error);
+        // Continue even if business config fails - user will be prompted to complete onboarding
+      }
+
       setUser(userData);
       setIsAuthenticated(true);
       localStorage.setItem('bookkeeper-user', JSON.stringify(userData));
@@ -355,7 +364,7 @@ export function useAuth(): AuthState {
       // Try Supabase Google OAuth first (only if configured)
       if (supabaseHelpers.isConfigured()) {
         try {
-          const { data, error } = await supabaseHelpers.signInWithGoogle();
+          const { error } = await supabaseHelpers.signInWithGoogle();
           if (!error) {
             // The redirect will handle the authentication
             // User will be handled by the auth state change listener when they return

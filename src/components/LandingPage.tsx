@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ArrowRight, Shield, Smartphone, BarChart3, Zap, Check, Star, Users, Globe, Lock, Download, Wifi, WifiOff, ExternalLink } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowRight, Shield, Smartphone, BarChart3, Zap, Check, Star, Users, Lock, Download, Wifi, WifiOff, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { UzajiLogo } from './UzajiLogo';
 import { useSettings } from '../hooks/useSettings';
@@ -12,7 +12,8 @@ interface LandingPageProps {
 export function LandingPage({ onGetStarted }: LandingPageProps) {
   const [isOnline] = useState(navigator.onLine);
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { settings } = useSettings();
+  const { t } = useTranslation(settings.language);
 
   const features = [
     {
