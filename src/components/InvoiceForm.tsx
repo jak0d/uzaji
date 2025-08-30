@@ -1,51 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   X, 
   Plus, 
   Trash2, 
-  Calendar,
-  User,
-  FileText,
-  DollarSign,
   Save,
-  Send
+  Send,
+  Package,
+  Briefcase
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
-
-interface InvoiceItem {
-  id: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-  category: string;
-}
-
-interface Invoice {
-  id?: string;
-  invoiceNumber: string;
-  customerId?: string;
-  customerName: string;
-  customerEmail?: string;
-  customerAddress?: string;
-  invoiceDate: string;
-  dueDate: string;
-  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
-  subtotal: number;
-  taxAmount: number;
-  totalAmount: number;
-  items: InvoiceItem[];
-  notes?: string;
-  attachments?: string[];
-  createdAt?: string;
-  updatedAt?: string;
-}
+import { Invoice, InvoiceItem, Product, getProducts } from '../utils/database';
+import { Combobox } from './Combobox';
 
 interface InvoiceFormProps {
   isOpen: boolean;
   onClose: () => void;
   invoice?: Invoice | null;
-  onSave: (invoice: Invoice) => void;
+  onSave: (invoice: Omit<Invoice, 'id' | 'createdAt' | 'updatedAt'>) => void;
 }
 
 export function InvoiceForm({ isOpen, onClose, invoice, onSave }: InvoiceFormProps) {
@@ -53,6 +24,7 @@ export function InvoiceForm({ isOpen, onClose, invoice, onSave }: InvoiceFormPro
   const themeClasses = getThemeClasses();
 
   const [formData, setFormData] = useState<Invoice>({
+    id: '', // Will be set by the database
     invoiceNumber: '',
     customerName: '',
     customerEmail: '',
@@ -64,10 +36,26 @@ export function InvoiceForm({ isOpen, onClose, invoice, onSave }: InvoiceFormPro
     taxAmount: 0,
     totalAmount: 0,
     items: [],
-    notes: ''
+    notes: '',
+    createdAt: '', // Will be set by the database
+    updatedAt: '', // Will be set by the database
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [products, setProducts] = useState<Product[]>([]);
+
+  const productOptions = [
+    {
+      label: 'Products',
+      options: products.filter(p => p.type === 'product').map(p => ({ value: p.id, label: p.name })),
+      icon: <Package className="w-4 h-4" />
+    },
+    {
+      label: 'Services',
+      options: products.filter(p => p.type === 'service').map(p => ({ value: p.id, label: p.name })),
+      icon: <Briefcase className="w-4 h-4" />
+    }
+  ].filter(group => group.options.length > 0);
 
   useEffect(() => {
     if (invoice) {
@@ -77,7 +65,20 @@ export function InvoiceForm({ isOpen, onClose, invoice, onSave }: InvoiceFormPro
       const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
       setFormData(prev => ({ ...prev, invoiceNumber }));
     }
-  }, [invoice]);
+
+    const fetchProducts = async () => {
+      try {
+        const fetchedProducts = await getProducts();
+        setProducts(fetchedProducts);
+      } catch (error) {
+        console.error('Failed to fetch products:', error);
+      }
+    };
+
+    if (isOpen) {
+      fetchProducts();
+    }
+  }, [invoice, isOpen]);
 
   const addItem = () => {
     const newItem: InvoiceItem = {
@@ -94,13 +95,13 @@ export function InvoiceForm({ isOpen, onClose, invoice, onSave }: InvoiceFormPro
     }));
   };
 
-  const updateItem = (itemId: string, field: keyof InvoiceItem, value: any) => {
+  const updateItem = (itemId: string, updates: Partial<InvoiceItem>) => {
     setFormData(prev => ({
       ...prev,
       items: prev.items.map(item => {
         if (item.id === itemId) {
-          const updatedItem = { ...item, [field]: value };
-          if (field === 'quantity' || field === 'unitPrice') {
+          const updatedItem = { ...item, ...updates };
+          if (updates.quantity !== undefined || updates.unitPrice !== undefined) {
             updatedItem.totalPrice = updatedItem.quantity * updatedItem.unitPrice;
           }
           return updatedItem;
@@ -108,6 +109,19 @@ export function InvoiceForm({ isOpen, onClose, invoice, onSave }: InvoiceFormPro
         return item;
       })
     }));
+  };
+
+  const handleItemSelection = (itemId: string, description: string) => {
+    const selectedProduct = products.find(p => p.name === description);
+    if (selectedProduct) {
+      updateItem(itemId, { 
+        description: selectedProduct.name,
+        unitPrice: selectedProduct.price,
+        category: selectedProduct.category || 'Service'
+      });
+    } else {
+      updateItem(itemId, { description });
+    }
   };
 
   const removeItem = (itemId: string) => {
@@ -168,11 +182,9 @@ export function InvoiceForm({ isOpen, onClose, invoice, onSave }: InvoiceFormPro
   const handleSave = (status: 'draft' | 'sent' = 'draft') => {
     if (!validateForm()) return;
 
-    const invoiceToSave: Invoice = {
+    const { id, createdAt, updatedAt, ...invoiceToSave } = {
       ...formData,
       status,
-      updatedAt: new Date().toISOString(),
-      createdAt: formData.createdAt || new Date().toISOString()
     };
 
     onSave(invoiceToSave);
@@ -308,12 +320,12 @@ export function InvoiceForm({ isOpen, onClose, invoice, onSave }: InvoiceFormPro
                   <div key={item.id} className={`border border-gray-200 dark:border-gray-700 rounded-lg p-4 ${themeClasses.cardBackground}`}>
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                       <div className="md:col-span-2">
-                        <input
-                          type="text"
+                        <Combobox
+                          options={productOptions}
                           value={item.description}
-                          onChange={(e) => updateItem(item.id, 'description', e.target.value)}
-                          className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${themeClasses.cardBackground} ${errors[`item_${index}_description`] ? 'border-red-500' : ''}`}
-                          placeholder="Item description"
+                          onChange={(value) => handleItemSelection(item.id, value)}
+                          placeholder="Select or type an item"
+                          className={`w-full ${errors[`item_${index}_description`] ? 'border-red-500' : ''}`}
                         />
                         {errors[`item_${index}_description`] && (
                           <p className="text-red-500 text-xs mt-1">{errors[`item_${index}_description`]}</p>
@@ -324,7 +336,7 @@ export function InvoiceForm({ isOpen, onClose, invoice, onSave }: InvoiceFormPro
                         <input
                           type="number"
                           value={item.quantity}
-                          onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                          onChange={(e) => updateItem(item.id, { quantity: parseFloat(e.target.value) || 0 })}
                           className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${themeClasses.cardBackground} ${errors[`item_${index}_quantity`] ? 'border-red-500' : ''}`}
                           placeholder="Qty"
                           min="0"
@@ -339,7 +351,7 @@ export function InvoiceForm({ isOpen, onClose, invoice, onSave }: InvoiceFormPro
                         <input
                           type="number"
                           value={item.unitPrice}
-                          onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          onChange={(e) => updateItem(item.id, { unitPrice: parseFloat(e.target.value) || 0 })}
                           className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${themeClasses.cardBackground} ${errors[`item_${index}_unitPrice`] ? 'border-red-500' : ''}`}
                           placeholder="Price"
                           min="0"

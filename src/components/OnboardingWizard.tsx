@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useSettings } from '../hooks/useSettings';
 import { Building2, Scale, ArrowRight, ArrowLeft, Check, AlertCircle } from 'lucide-react';
 import { UzajiLogo } from './UzajiLogo';
 import { completeOnboarding, getDefaultExpenseCategories } from '../utils/businessConfig';
@@ -21,6 +22,8 @@ interface ValidationErrors {
 }
 
 export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: OnboardingWizardProps) {
+  const { getThemeClasses } = useSettings();
+  const themeClasses = getThemeClasses();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<FormData>({
     businessName: '',
@@ -154,20 +157,20 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className={`${themeClasses.cardBackground} rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto`}>
         {/* Header */}
-        <div className="p-6 border-b border-gray-200">
+        <div className={`p-6 border-b ${themeClasses.border}`}>
           <div className="flex items-center justify-between mb-4">
             <UzajiLogo size="md" />
-            <div className="flex items-center space-x-2 text-sm text-gray-500">
+            <div className={`flex items-center space-x-2 text-sm ${themeClasses.textSecondary}`}>
               <span>Step {currentStep} of {totalSteps}</span>
             </div>
           </div>
           
           {/* Progress Bar */}
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className={`w-full ${themeClasses.background} rounded-full h-2`}>
             <div 
-              className={`bg-gradient-to-r ${typeInfo.color} h-2 rounded-full transition-all duration-300`}
+              className={`${themeClasses.accent} h-2 rounded-full transition-all duration-300`}
               style={{ width: `${(currentStep / totalSteps) * 100}%` }}
             />
           </div>
@@ -178,18 +181,18 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
           {/* Step 1: Confirmation */}
           {currentStep === 1 && (
             <div className="text-center">
-              <div className={`w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br ${typeInfo.color} flex items-center justify-center shadow-lg`}>
+              <div className={`w-20 h-20 mx-auto mb-6 rounded-2xl ${themeClasses.accent} flex items-center justify-center shadow-lg`}>
                 <Icon className="w-10 h-10 text-white" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              <h2 className={`text-2xl font-bold ${themeClasses.text} mb-2`}>
                 Perfect Choice!
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className={`${themeClasses.textSecondary} mb-6`}>
                 You've selected <strong>{typeInfo.title}</strong>. Let's set up your workspace with the right tools and categories for your business.
               </p>
-              <div className="bg-gray-50 rounded-lg p-4 text-left">
-                <h3 className="font-semibold text-gray-900 mb-2">What's included:</h3>
-                <ul className="space-y-2 text-sm text-gray-600">
+              <div className={`${themeClasses.background} rounded-lg p-4 text-left`}>
+                <h3 className={`font-semibold ${themeClasses.text} mb-2`}>What's included:</h3>
+                <ul className={`space-y-2 text-sm ${themeClasses.textSecondary}`}>
                   <li className="flex items-center">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
                     Customized expense categories for your business type
@@ -214,16 +217,16 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
           {/* Step 2: Business Name */}
           {currentStep === 2 && (
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              <h2 className={`text-2xl font-bold ${themeClasses.text} mb-2`}>
                 What's your business name?
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className={`${themeClasses.textSecondary} mb-6`}>
                 This will appear on your dashboard and can be changed later in settings.
               </p>
               
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="businessName" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="businessName" className={`block text-sm font-medium ${themeClasses.text} mb-2`}>
                     Business Name *
                   </label>
                   <input
@@ -236,31 +239,31 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
                         setErrors(prev => ({ ...prev, businessName: undefined }));
                       }
                     }}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                      errors.businessName ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${themeClasses.cardBackground} ${ 
+                      errors.businessName ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : themeClasses.border
                     }`}
                     placeholder="Enter your business name"
                     maxLength={100}
                     autoFocus
                   />
                   {errors.businessName && (
-                    <div className="mt-2 flex items-center text-red-600 text-sm">
+                    <div className="mt-2 flex items-center text-red-600 dark:text-red-400 text-sm">
                       <AlertCircle className="w-4 h-4 mr-1 flex-shrink-0" />
                       {errors.businessName}
                     </div>
                   )}
                 </div>
 
-                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                <div className={`bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800`}>
                   <div className="flex items-start space-x-3">
                     <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                       <span className="text-white text-xs font-bold">i</span>
                     </div>
                     <div>
-                      <h4 className="font-semibold text-blue-900 mb-1">
+                      <h4 className={`font-semibold text-blue-900 dark:text-blue-200 mb-1`}>
                         Privacy & Security
                       </h4>
-                      <p className="text-blue-800 text-sm">
+                      <p className={`text-blue-800 dark:text-blue-300 text-sm`}>
                         Your business information is stored locally on your device and encrypted for security. We never send your data to external servers.
                       </p>
                     </div>
@@ -273,39 +276,39 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
           {/* Step 3: Categories */}
           {currentStep === 3 && (
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              <h2 className={`text-2xl font-bold ${themeClasses.text} mb-2`}>
                 Choose your expense categories
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className={`${themeClasses.textSecondary} mb-6`}>
                 We've pre-selected common categories for {businessType === 'legal' ? 'legal firms' : 'small businesses'}. You can customize these anytime.
               </p>
 
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
-                  <div className="w-6 h-6 border-2 border-gray-200 border-t-blue-600 rounded-full animate-spin mr-3" />
-                  <span className="text-gray-600">Loading categories...</span>
+                  <div className={`w-6 h-6 border-2 ${themeClasses.border} border-t-blue-600 rounded-full animate-spin mr-3`} />
+                  <span className={`${themeClasses.textSecondary}`}>Loading categories...</span>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-64 overflow-y-auto">
                   {availableCategories.map((category) => (
                     <label
                       key={category.id}
-                      className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                      className={`flex items-center p-3 border ${themeClasses.border} rounded-lg ${themeClasses.hover} cursor-pointer transition-colors`}
                     >
                       <input
                         type="checkbox"
                         checked={formData.selectedCategories.includes(category.id)}
                         onChange={() => handleCategoryToggle(category.id)}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        className={`w-4 h-4 text-blue-600 ${themeClasses.border} rounded focus:ring-blue-500`}
                       />
                       <div className="ml-3 flex-1">
-                        <div className="font-medium text-gray-900">{category.name}</div>
+                        <div className={`font-medium ${themeClasses.text}`}>{category.name}</div>
                         {category.description && (
-                          <div className="text-sm text-gray-500">{category.description}</div>
+                          <div className={`text-sm ${themeClasses.textSecondary}`}>{category.description}</div>
                         )}
                       </div>
                       {category.isDefault && (
-                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                        <span className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300 px-2 py-1 rounded-full">
                           Recommended
                         </span>
                       )}
@@ -314,7 +317,7 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
                 </div>
               )}
 
-              <div className="mt-4 text-sm text-gray-500">
+              <div className={`mt-4 text-sm ${themeClasses.textSecondary}`}>
                 Selected {formData.selectedCategories.length} categories. You can add more categories later in Settings.
               </div>
             </div>
@@ -322,10 +325,10 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-gray-200 flex items-center justify-between">
+        <div className={`p-6 border-t ${themeClasses.border} flex items-center justify-between`}>
           <button
             onClick={currentStep === 1 ? onBack : handlePrevious}
-            className="flex items-center px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+            className={`flex items-center px-4 py-2 ${themeClasses.textSecondary} hover:text-gray-800 dark:hover:text-gray-200 transition-colors`}
             disabled={isSubmitting}
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -337,7 +340,7 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
               <button
                 onClick={handleNext}
                 disabled={isLoading}
-                className={`flex items-center px-6 py-2 bg-gradient-to-r ${typeInfo.color} text-white rounded-lg hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed`}
+                className={`flex items-center px-6 py-2 ${themeClasses.accent} ${themeClasses.accentText} rounded-lg hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 Next
                 <ArrowRight className="w-4 h-4 ml-2" />
@@ -346,7 +349,7 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
               <button
                 onClick={handleComplete}
                 disabled={isSubmitting || isLoading}
-                className={`flex items-center px-6 py-2 bg-gradient-to-r ${typeInfo.color} text-white rounded-lg hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed`}
+                className={`flex items-center px-6 py-2 ${themeClasses.accent} ${themeClasses.accentText} rounded-lg hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {isSubmitting ? (
                   <>

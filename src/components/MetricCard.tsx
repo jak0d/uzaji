@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { useSettings } from '../hooks/useSettings';
 import { FaArrowUp, FaArrowDown, FaMinus } from 'react-icons/fa';
 import { formatCurrency } from '../utils/formatters';
 
@@ -48,22 +49,24 @@ const colorMap = {
     border: 'border-indigo-500',
   },
   gray: {
-    bg: 'bg-gray-100 dark:bg-gray-800',
-    text: 'text-gray-600 dark:text-gray-400',
-    border: 'border-gray-500',
+    bg: 'bg-slate-100 dark:bg-slate-800',
+    text: 'text-slate-600 dark:text-slate-400',
+    border: 'border-slate-500',
   },
 };
 
 export function MetricCard({ title, value, icon, trend, trendValue, color = 'blue' }: MetricCardProps) {
+  const { getThemeClasses } = useSettings();
+  const themeClasses = getThemeClasses();
   const colors = colorMap[color];
   
   return (
-    <div className={`bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 ${colors.border} h-full flex flex-col`}>
+    <div className={`${themeClasses.cardBackground} rounded-lg shadow p-6 border-l-4 ${colors.border} h-full flex flex-col`}>
       <div className="flex items-center justify-between flex-grow">
         <div>
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
+          <p className={`text-sm font-medium ${themeClasses.textSecondary}`}>{title}</p>
           <p className={`mt-1 text-2xl font-semibold ${
-            value >= 0 ? 'text-gray-900 dark:text-white' : 'text-red-600 dark:text-red-400'
+            value >= 0 ? themeClasses.text : 'text-red-600 dark:text-red-400'
           }`}>
             {formatCurrency(Math.abs(value))}
           </p>
@@ -75,16 +78,16 @@ export function MetricCard({ title, value, icon, trend, trendValue, color = 'blu
               <FaArrowDown className={`h-4 w-4 text-red-500 dark:text-red-400 mr-1`} />
             )}
             {trend === 'neutral' && (
-              <FaMinus className={`h-4 w-4 text-gray-400 dark:text-gray-500 mr-1`} />
+              <FaMinus className={`h-4 w-4 ${themeClasses.textSecondary} mr-1`} />
             )}
             <span className={`text-xs font-medium ${
               trend === 'up' ? colors.text : 
               trend === 'down' ? 'text-red-500 dark:text-red-400' : 
-              'text-gray-500 dark:text-gray-400'
+              themeClasses.textSecondary
             }`}>
               {trendValue} {trend !== 'neutral' ? (trend === 'up' ? 'increase' : 'decrease') : ''}
             </span>
-            <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">vs last period</span>
+            <span className={`text-xs ${themeClasses.textSecondary} ml-1`}>vs last period</span>
           </div>
         </div>
         <div className={`p-3 rounded-full ${colors.bg} ${colors.text}`}>

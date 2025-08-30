@@ -139,13 +139,34 @@ export function useSettings() {
   const getThemeClasses = () => {
     const isRTL = isRTLLanguage(settings.language);
     
+    // Define a more modern and professional color palette
+    const themeConfig = {
+      light: {
+        background: 'bg-slate-50', // Lighter, cleaner background
+        cardBackground: 'bg-white',
+        text: 'text-slate-800', // Softer black for text
+        textSecondary: 'text-slate-500',
+        border: 'border-slate-200',
+        hover: 'hover:bg-slate-100',
+        accent: 'bg-blue-500',
+        accentText: 'text-white',
+      },
+      dark: {
+        background: 'bg-slate-900', // Deep, modern dark background
+        cardBackground: 'bg-slate-800',
+        text: 'text-slate-200', // Softer white for text
+        textSecondary: 'text-slate-400',
+        border: 'border-slate-700',
+        hover: 'hover:bg-slate-700',
+        accent: 'bg-blue-500',
+        accentText: 'text-white',
+      },
+    };
+
+    const currentTheme = settings.theme === 'dark' ? themeConfig.dark : themeConfig.light;
+
     return {
-      background: settings.theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50',
-      cardBackground: settings.theme === 'dark' ? 'bg-gray-800' : 'bg-white',
-      text: settings.theme === 'dark' ? 'text-white' : 'text-gray-900',
-      textSecondary: settings.theme === 'dark' ? 'text-gray-300' : 'text-gray-600',
-      border: settings.theme === 'dark' ? 'border-gray-700' : 'border-gray-200',
-      hover: settings.theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100',
+      ...currentTheme,
       direction: isRTL ? 'rtl' : 'ltr',
       textAlign: isRTL ? 'text-right' : 'text-left',
       marginStart: isRTL ? 'ml-4' : 'mr-4',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, User as UserIcon, Shield, Bell, Download, Upload, Trash2, Save, Search, ChevronDown, Globe, Palette, Calendar, DollarSign, Eye, Monitor, Sun, Moon, Check, Cloud, CloudOff, Database, Wifi, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, User as UserIcon, Shield, Download, Upload, Trash2, Search, ChevronDown, Globe, Palette, DollarSign, Eye, Monitor, Sun, Moon, Check, Cloud, Database, Wifi, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { UzajiLogo } from './UzajiLogo';
 import { useSettings } from '../hooks/useSettings';
@@ -13,12 +13,11 @@ import { supabaseHelpers } from '../utils/supabase';
 import type { User } from '../hooks/useAuth';
 
 interface SettingsProps {
-  onBack: () => void;
   user: User | null;
   onLogout: () => void;
 }
 
-export function Settings({ onBack, user, onLogout }: SettingsProps) {
+export function Settings({ user, onLogout }: SettingsProps) {
   const { settings, updateSettings, formatCurrency, getThemeClasses } = useSettings();
   const { t } = useTranslation(settings.language);
   const themeClasses = getThemeClasses();
@@ -337,7 +336,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center h-16">
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate(-1)}
               className={`${themeClasses.marginEnd} p-2 ${themeClasses.textSecondary} hover:${themeClasses.text} ${themeClasses.hover} rounded-lg transition-colors`}
             >
               <ArrowLeft className="w-5 h-5" />
@@ -351,7 +350,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Supabase Connection Status */}
         {!supabaseConfigured && (
-          <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+          <div className={`mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg`}>
             <div className="flex items-center space-x-3">
               <Database className="w-5 h-5 text-yellow-600" />
               <div>
@@ -362,7 +361,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
                     href="https://bolt.new/setup/supabase" 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-700 underline ml-1"
+                    className={`${themeClasses.accentText} hover:underline ml-1`}
                   >
                     Learn how to set up Supabase
                   </a>
@@ -381,8 +380,8 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
         {supabaseConfigured && (
           <div className={`mb-6 p-4 rounded-lg border ${
             supabaseConnected 
-              ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-              : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+              ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700'
+              : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700'
           }`}>
             <div className="flex items-center space-x-3">
               <div className={`w-5 h-5 ${supabaseConnected ? 'text-green-600' : 'text-blue-600'}`}>
@@ -405,7 +404,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
 
         {/* Connection Error Warning */}
         {supabaseConfigured && !supabaseConnected && (
-          <div className="mb-6 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+          <div className={`mb-6 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg`}>
             <div className="flex items-center space-x-3">
               <AlertTriangle className="w-5 h-5 text-orange-600" />
               <div>
@@ -425,7 +424,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
             onClick={() => setActiveTab('preferences')}
             className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
               activeTab === 'preferences'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg'
+                ? `${themeClasses.accent} ${themeClasses.accentText} shadow-lg`
                 : `${themeClasses.cardBackground} ${themeClasses.text} ${themeClasses.hover} ${themeClasses.border} border`
             }`}
           >
@@ -436,7 +435,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
             onClick={() => setActiveTab('account')}
             className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
               activeTab === 'account'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg'
+                ? `${themeClasses.accent} ${themeClasses.accentText} shadow-lg`
                 : `${themeClasses.cardBackground} ${themeClasses.text} ${themeClasses.hover} ${themeClasses.border} border`
             }`}
           >
@@ -447,7 +446,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
             onClick={() => setActiveTab('security')}
             className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
               activeTab === 'security'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg'
+                ? `${themeClasses.accent} ${themeClasses.accentText} shadow-lg`
                 : `${themeClasses.cardBackground} ${themeClasses.text} ${themeClasses.hover} ${themeClasses.border} border`
             }`}
           >
@@ -458,7 +457,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
             onClick={() => setActiveTab('data')}
             className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
               activeTab === 'data'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg'
+                ? `${themeClasses.accent} ${themeClasses.accentText} shadow-lg`
                 : `${themeClasses.cardBackground} ${themeClasses.text} ${themeClasses.hover} ${themeClasses.border} border`
             }`}
           >
@@ -502,7 +501,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
                       <div className={`absolute top-full left-0 right-0 mt-1 ${themeClasses.cardBackground} rounded-lg shadow-xl ${themeClasses.border} border z-50 max-h-96 overflow-hidden`}>
                         <div className="p-3 border-b border-gray-200 dark:border-gray-700">
                           <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${themeClasses.textSecondary}`} />
                             <input
                               type="text"
                               placeholder={t('settings.searchLanguages')}
@@ -516,7 +515,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
                         <div className="max-h-80 overflow-y-auto">
                           {Object.entries(filteredLanguages).map(([region, codes]) => (
                             <div key={region}>
-                              <div className={`px-4 py-2 text-xs font-semibold ${themeClasses.textSecondary} bg-gray-50 dark:bg-gray-800 border-b ${themeClasses.border}`}>
+                              <div className={`px-4 py-2 text-xs font-semibold ${themeClasses.textSecondary} ${themeClasses.background} border-b ${themeClasses.border}`}>
                                 {region}
                               </div>
                               {codes.map((code) => {
@@ -532,7 +531,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
                                       setLanguageSearch('');
                                     }}
                                     className={`w-full px-4 py-3 ${themeClasses.textAlign} ${themeClasses.hover} transition-colors flex items-center justify-between group ${
-                                      settings.language === code ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                                      settings.language === code ? 'bg-blue-50 dark:bg-blue-900/30' : ''
                                     }`}
                                   >
                                     <div className="flex items-center space-x-3">
@@ -543,13 +542,11 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
                                         {language.nativeName}
                                       </span>
                                       {language.rtl && (
-                                        <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
-                                          RTL
-                                        </span>
+                                        <span className="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 px-2 py-1 rounded">RTL</span>
                                       )}
                                     </div>
                                     {settings.language === code && (
-                                      <Check className="w-4 h-4 text-blue-600" />
+                                      <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                                     )}
                                   </button>
                                 );
@@ -596,7 +593,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
                       <div className={`absolute top-full left-0 right-0 mt-1 ${themeClasses.cardBackground} rounded-lg shadow-xl ${themeClasses.border} border z-50 max-h-96 overflow-hidden`}>
                         <div className="p-3 border-b border-gray-200 dark:border-gray-700">
                           <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${themeClasses.textSecondary}`} />
                             <input
                               type="text"
                               placeholder={t('settings.searchCurrencies')}
@@ -610,7 +607,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
                         <div className="max-h-80 overflow-y-auto">
                           {Object.entries(filteredCurrencies).map(([region, codes]) => (
                             <div key={region}>
-                              <div className={`px-4 py-2 text-xs font-semibold ${themeClasses.textSecondary} bg-gray-50 dark:bg-gray-800 border-b ${themeClasses.border}`}>
+                              <div className={`px-4 py-2 text-xs font-semibold ${themeClasses.textSecondary} ${themeClasses.background} border-b ${themeClasses.border}`}>
                                 {region}
                               </div>
                               {codes.map((code) => {
@@ -626,7 +623,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
                                       setCurrencySearch('');
                                     }}
                                     className={`w-full px-4 py-3 ${themeClasses.textAlign} ${themeClasses.hover} transition-colors flex items-center justify-between group ${
-                                      settings.currency === code ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                                      settings.currency === code ? 'bg-blue-50 dark:bg-blue-900/30' : ''
                                     }`}
                                   >
                                     <div className="flex items-center space-x-3">
@@ -638,7 +635,7 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
                                       </span>
                                     </div>
                                     {settings.currency === code && (
-                                      <Check className="w-4 h-4 text-blue-600" />
+                                      <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                                     )}
                                   </button>
                                 );
@@ -665,12 +662,12 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
                   onClick={() => updateSettings({ theme: 'light' })}
                   className={`p-4 rounded-lg border-2 transition-all duration-200 ${
                     settings.theme === 'light'
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                      ? `border-blue-500 ${themeClasses.accent} ${themeClasses.accentText}`
                       : `${themeClasses.border} border ${themeClasses.hover}`
                   }`}
                 >
                   <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-white border border-gray-300 rounded-lg flex items-center justify-center">
+                    <div className="w-8 h-8 bg-white border border-slate-300 rounded-lg flex items-center justify-center">
                       <Sun className="w-4 h-4 text-yellow-500" />
                     </div>
                     <div className={themeClasses.textAlign}>
@@ -684,12 +681,12 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
                   onClick={() => updateSettings({ theme: 'dark' })}
                   className={`p-4 rounded-lg border-2 transition-all duration-200 ${
                     settings.theme === 'dark'
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                      ? `border-blue-500 ${themeClasses.accent} ${themeClasses.accentText}`
                       : `${themeClasses.border} border ${themeClasses.hover}`
                   }`}
                 >
                   <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center">
+                    <div className="w-8 h-8 bg-slate-800 border border-slate-600 rounded-lg flex items-center justify-center">
                       <Moon className="w-4 h-4 text-blue-400" />
                     </div>
                     <div className={themeClasses.textAlign}>
@@ -703,13 +700,13 @@ export function Settings({ onBack, user, onLogout }: SettingsProps) {
                   onClick={() => updateSettings({ theme: 'system' })}
                   className={`p-4 rounded-lg border-2 transition-all duration-200 ${
                     settings.theme === 'system'
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                      ? `border-blue-500 ${themeClasses.accent} ${themeClasses.accentText}`
                       : `${themeClasses.border} border ${themeClasses.hover}`
                   }`}
                 >
                   <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-white to-gray-800 border border-gray-300 rounded-lg flex items-center justify-center">
-                      <Monitor className="w-4 h-4 text-gray-600" />
+                    <div className="w-8 h-8 bg-gradient-to-br from-white to-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg flex items-center justify-center">
+                      <Monitor className="w-4 h-4 text-slate-600 dark:text-slate-300" />
                     </div>
                     <div className={themeClasses.textAlign}>
                       <p className={`font-medium ${themeClasses.text}`}>{t('settings.system')}</p>

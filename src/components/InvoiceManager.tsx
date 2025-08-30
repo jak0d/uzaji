@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Plus, 
   Edit, 
@@ -7,48 +7,22 @@ import {
   Send, 
   Download, 
   Search,
-  Filter,
-  Calendar,
-  DollarSign,
-  User,
   FileText,
   Clock,
   CheckCircle,
   AlertCircle,
   XCircle
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
 import { InvoiceForm } from './InvoiceForm';
-
-interface Invoice {
-  id: string;
-  invoiceNumber: string;
-  customerId?: string;
-  customerName: string;
-  customerEmail?: string;
-  customerAddress?: string;
-  invoiceDate: string;
-  dueDate: string;
-  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
-  subtotal: number;
-  taxAmount: number;
-  totalAmount: number;
-  items: InvoiceItem[];
-  notes?: string;
-  attachments?: string[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface InvoiceItem {
-  id: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-  category: string;
-}
+import { 
+  getInvoices, 
+  addInvoice, 
+  updateInvoice, 
+  deleteInvoice, 
+  Invoice,
+  addTransaction
+} from '../utils/database';
 
 interface InvoiceManagerProps {
   className?: string;
@@ -57,7 +31,6 @@ interface InvoiceManagerProps {
 export function InvoiceManager({ className = '' }: InvoiceManagerProps) {
   const { formatCurrency, formatDate, getThemeClasses } = useSettings();
   const themeClasses = getThemeClasses();
-  const navigate = useNavigate();
   
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,54 +39,31 @@ export function InvoiceManager({ className = '' }: InvoiceManagerProps) {
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
 
-  useEffect(() => {
-    loadInvoices();
+  const loadInvoices = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const fetchedInvoices = await getInvoices();
+      setInvoices(fetchedInvoices);
+    } catch (error) {
+      console.error("Failed to load invoices:", error);
+      // You might want to show an error message to the user
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  const loadInvoices = async () => {
-    // Mock data for demonstration
-    const mockInvoices: Invoice[] = [
-      {
-        id: '1',
-        invoiceNumber: 'INV-2024-001',
-        customerName: 'ABC Company',
-        customerEmail: 'billing@abccompany.com',
-        invoiceDate: '2024-01-15',
-        dueDate: '2024-02-14',
-        status: 'sent',
-        subtotal: 1000,
-        taxAmount: 100,
-        totalAmount: 1100,
-        items: [
-          {
-            id: '1',
-            description: 'Consulting Services',
-            quantity: 10,
-            unitPrice: 100,
-            totalPrice: 1000,
-            category: 'Service'
-          }
-        ],
-        notes: 'Thank you for your business!',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-    ];
-    
-    setInvoices(mockInvoices);
-    setIsLoading(false);
-  };
+  useEffect(() => {
+    loadInvoices();
+  }, [loadInvoices]);
 
-  const handleSaveInvoice = (invoiceData: Invoice) => {
+  const handleSaveInvoice = async (invoiceData: Omit<Invoice, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (editingInvoice) {
-      setInvoices(prev => prev.map(invoice => 
-        invoice.id === editingInvoice.id ? { ...invoiceData, id: editingInvoice.id } : invoice
-      ));
+      await updateInvoice(editingInvoice.id, invoiceData);
     } else {
-      const newInvoice = { ...invoiceData, id: Date.now().toString() };
-      setInvoices(prev => [...prev, newInvoice]);
+      await addInvoice(invoiceData);
     }
     setEditingInvoice(null);
+    loadInvoices();
   };
 
   const handleEditInvoice = (invoice: Invoice) => {
@@ -121,16 +71,34 @@ export function InvoiceManager({ className = '' }: InvoiceManagerProps) {
     setShowInvoiceForm(true);
   };
 
-  const handleSendInvoice = (invoiceId: string) => {
-    setInvoices(prev => prev.map(invoice => 
-      invoice.id === invoiceId ? { ...invoice, status: 'sent' as const, updatedAt: new Date().toISOString() } : invoice
-    ));
+  const handleDeleteInvoice = async (invoiceId: string) => {
+    if (window.confirm('Are you sure you want to delete this invoice?')) {
+      await deleteInvoice(invoiceId);
+      loadInvoices();
+    }
   };
 
-  const handleMarkAsPaid = (invoiceId: string) => {
-    setInvoices(prev => prev.map(invoice => 
-      invoice.id === invoiceId ? { ...invoice, status: 'paid' as const, updatedAt: new Date().toISOString() } : invoice
-    ));
+  const handleSendInvoice = async (invoiceId: string) => {
+    await updateInvoice(invoiceId, { status: 'sent' });
+    loadInvoices();
+  };
+
+  const handleMarkAsPaid = async (invoiceId: string) => {
+    await updateInvoice(invoiceId, { status: 'paid' });
+    const paidInvoice = invoices.find(inv => inv.id === invoiceId);
+    if (paidInvoice) {
+      await addTransaction({
+        date: new Date().toISOString().split('T')[0],
+        description: `Payment for Invoice ${paidInvoice.invoiceNumber}`,
+        amount: paidInvoice.totalAmount,
+        type: 'income',
+        category: 'Sales',
+        customer: paidInvoice.customerName,
+        account: 'Default Account', // Or choose a relevant account
+        encrypted: false,
+      });
+    }
+    loadInvoices();
   };
 
   const getStatusIcon = (status: Invoice['status']) => {
@@ -329,6 +297,13 @@ export function InvoiceManager({ className = '' }: InvoiceManagerProps) {
                           title="Edit Invoice"
                         >
                           <Edit className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteInvoice(invoice.id)}
+                          className={`p-1 text-red-600 hover:text-red-700 rounded transition-colors`}
+                          title="Delete Invoice"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                         <button 
                           className={`p-1 ${themeClasses.textSecondary} hover:${themeClasses.text} rounded transition-colors`}

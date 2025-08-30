@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Settings, Wifi, WifiOff, LogOut, User as UserIcon, Bell, Menu, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Settings, Wifi, WifiOff, LogOut, Bell, Menu, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { UzajiLogo } from './UzajiLogo';
 import { useSettings } from '../hooks/useSettings';
@@ -165,8 +165,8 @@ export function DashboardHeader({ user, onLogout, onMenuToggle, isMobileMenuOpen
                   className={`flex items-center space-x-2 p-2 ${themeClasses.text} ${themeClasses.hover} rounded-lg transition-colors`}
                   aria-label="User menu"
                 >
-                  <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center shadow-sm">
-                    <span className="text-white text-sm font-medium">
+                  <div className={`w-8 h-8 ${themeClasses.accent} rounded-full flex items-center justify-center shadow-sm`}>
+                    <span className={`${themeClasses.accentText} text-sm font-medium`}>
                       {getUserInitials(user.name)}
                     </span>
                   </div>
@@ -181,8 +181,8 @@ export function DashboardHeader({ user, onLogout, onMenuToggle, isMobileMenuOpen
                     {/* User Info */}
                     <div className={`px-4 py-3 border-b ${themeClasses.border}`}>
                       <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center">
-                          <span className="text-white font-medium">
+                        <div className={`w-10 h-10 ${themeClasses.accent} rounded-full flex items-center justify-center`}>
+                          <span className={`${themeClasses.accentText} font-medium`}>
                             {getUserInitials(user.name)}
                           </span>
                         </div>

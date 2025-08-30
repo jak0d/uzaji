@@ -24,6 +24,7 @@ export interface Transaction {
 export interface Product {
   id: string;
   name: string;
+  type: 'product' | 'service';
   description: string;
   price: number;
   category: string;
@@ -101,6 +102,36 @@ export interface FileAttachment {
   transactionId: string;
   encrypted: boolean;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface InvoiceItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  category: string;
+}
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  customerId?: string;
+  customerName: string;
+  customerEmail?: string;
+  customerAddress?: string;
+  invoiceDate: string;
+  dueDate: string;
+  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+  subtotal: number;
+  taxAmount: number;
+  totalAmount: number;
+  items: InvoiceItem[];
+  notes?: string;
+  attachments?: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Legal Firm Client Management Models
@@ -228,12 +259,17 @@ interface BookkeepingDB extends DBSchema {
     value: ExtraFee;
     indexes: { 'by-file': string };
   };
+  invoices: {
+    key: string;
+    value: Invoice;
+    indexes: { 'by-customer': string; 'by-status': string; 'by-date': string };
+  };
 }
 
 let db: IDBPDatabase<BookkeepingDB>;
 
 export async function initDB(): Promise<void> {
-  db = await openDB<BookkeepingDB>('bookkeeping-db', 3, {
+  db = await openDB<BookkeepingDB>('bookkeeping-db', 4, {
     async upgrade(db, oldVersion, _newVersion, transaction) {
       // Handle migration from version 1 to 2
       if (oldVersion < 1) {
@@ -335,6 +371,15 @@ export async function initDB(): Promise<void> {
       if (oldVersion < 3) {
         // Version 3 migration logic can be added here if needed in the future.
         // The stores for legal features were already added in version 2.
+      }
+
+      if (oldVersion < 4) {
+        const invoiceStore = db.createObjectStore('invoices', {
+          keyPath: 'id',
+        });
+        invoiceStore.createIndex('by-customer', 'customerName');
+        invoiceStore.createIndex('by-status', 'status');
+        invoiceStore.createIndex('by-date', 'invoiceDate');
       }
     },
   });
@@ -482,7 +527,23 @@ export async function addProduct(product: Omit<Product, 'id' | 'createdAt' | 'up
 
 export async function getProducts(): Promise<Product[]> {
   const database = await getDB();
-  return await database.getAll('products');
+  const products = await database.getAll('products');
+  const services = await database.getAll('services');
+
+  const productItems = products.map(p => ({ ...p, type: 'product' as const }));
+  const serviceItems = services.map(s => ({
+    id: s.id,
+    name: s.name,
+    description: s.description,
+    price: s.hourlyRate,
+    category: s.category,
+    encrypted: s.encrypted,
+    createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
+    type: 'service' as const
+  }));
+
+  return [...productItems, ...serviceItems];
 }
 
 export async function updateProduct(id: string, updates: Partial<Product>): Promise<void> {
@@ -983,5 +1044,45 @@ export async function updateExtraFee(id: string, updates: Partial<ExtraFee>): Pr
 export async function deleteExtraFee(id: string): Promise<void> {
   const database = await getDB();
   await database.delete('extraFees', id);
+}
+
+// Invoice operations
+export async function addInvoice(invoice: Omit<Invoice, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  const database = await getDB();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  const newInvoice: Invoice = {
+    ...invoice,
+    id,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await database.add('invoices', newInvoice);
+  return id;
+}
+
+export async function getInvoices(): Promise<Invoice[]> {
+  const database = await getDB();
+  return await database.getAll('invoices');
+}
+
+export async function updateInvoice(id: string, updates: Partial<Invoice>): Promise<void> {
+  const database = await getDB();
+  const invoice = await database.get('invoices', id);
+  if (invoice) {
+    const updatedInvoice = {
+      ...invoice,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    await database.put('invoices', updatedInvoice);
+  }
+}
+
+export async function deleteInvoice(id: string): Promise<void> {
+  const database = await getDB();
+  await database.delete('invoices', id);
 }
 

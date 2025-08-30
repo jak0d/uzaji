@@ -15,7 +15,6 @@ import { AdvancedReports } from './components/AdvancedReports';
 import { AIInsightsDashboard } from './components/AIInsightsDashboard';
 import { BankingModule } from './components/BankingModule';
 import { LegalReports } from './components/LegalReports';
-import { ComprehensiveTest } from './components/ComprehensiveTest';
 import { OfflineFirstVerification } from './components/OfflineFirstVerification';
 import { DeploymentReadiness } from './components/DeploymentReadiness';
 import { SupabaseVerification } from './components/SupabaseVerification';
@@ -35,7 +34,6 @@ function AppContent() {
   const { isAuthenticated, user, login, signup, googleAuth, logout } = useAuth();
   const [isLoading, setIsLoading] = React.useState(true);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
-  const [businessType, setBusinessType] = React.useState<'general' | 'legal'>('general');
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -53,10 +51,7 @@ function AppContent() {
           setShowOnboarding(needsOnboardingFlow);
           
           if (!needsOnboardingFlow) {
-            const type = await getBusinessType();
-            if (type) {
-              setBusinessType(type);
-            }
+            await getBusinessType();
           }
         }
       } catch (error) {
@@ -127,10 +122,7 @@ function AppContent() {
         setShowOnboarding(needsOnboardingFlow);
         
         if (!needsOnboardingFlow) {
-          const type = await getBusinessType();
-          if (type) {
-            setBusinessType(type);
-          }
+          await getBusinessType();
         }
       } catch (error) {
         console.error('Error checking post-login setup:', error);
@@ -158,10 +150,7 @@ function AppContent() {
         setShowOnboarding(needsOnboardingFlow);
         
         if (!needsOnboardingFlow) {
-          const type = await getBusinessType();
-          if (type) {
-            setBusinessType(type);
-          }
+          await getBusinessType();
         }
       } catch (error) {
         console.error('Error checking post-auth setup:', error);
@@ -174,10 +163,7 @@ function AppContent() {
     setShowOnboarding(false);
     // Reload business type after onboarding
     try {
-      const type = await getBusinessType();
-      if (type) {
-        setBusinessType(type);
-      }
+      await getBusinessType();
     } catch (error) {
       console.error('Error loading business type after onboarding:', error);
     }
@@ -284,7 +270,23 @@ function AppContent() {
         />
         <Route path="products" element={<ProductsServicesManager />} />
         <Route path="clients" element={<ClientFileTracker />} />
-        <Route path="sales" element={<InvoiceManager />} />
+        <Route 
+          path="sales" 
+          element={(
+            <ComingSoonPage 
+              title="Sales Dashboard"
+              subtitle="Track your sales performance and growth."
+              description="Our upcoming Sales Dashboard will provide you with powerful insights into your sales data, including revenue trends, top-selling products, and customer analytics."
+              features={[
+                'Real-time sales tracking',
+                'Revenue and profit analysis',
+                'Customer lifetime value',
+                'Sales forecasting',
+              ]}
+            />
+          )} 
+        />
+        <Route path="invoices" element={<InvoiceManager />} />
         <Route path="purchases" element={<BillManager />} />
         <Route path="reports" element={<FinancialReports />}>
           <Route path="advanced" element={<AdvancedReports />} />
@@ -309,9 +311,7 @@ function AppContent() {
         <Route 
           path="transactions/new" 
           element={
-            <TransactionForm 
-              onBack={() => navigate('/transactions')} 
-            />
+            <TransactionForm />
           } 
         />
         
