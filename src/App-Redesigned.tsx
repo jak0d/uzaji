@@ -5,7 +5,6 @@ import { RedesignedDashboard } from './components/RedesignedDashboard';
 import { TransactionsTable } from './components/TransactionsTable';
 import { ProductsServicesManager } from './components/ProductsServicesManager';
 import { EnhancedSettings } from './components/EnhancedSettings';
-import { ComingSoonPage } from './components/ComingSoonPage';
 import { ClientFileTracker } from './components/ClientFileTracker';
 import { SystemTest } from './components/SystemTest';
 import { InvoiceManager } from './components/InvoiceManager';
@@ -270,22 +269,7 @@ function AppContent() {
         />
         <Route path="products" element={<ProductsServicesManager />} />
         <Route path="clients" element={<ClientFileTracker />} />
-        <Route 
-          path="sales" 
-          element={(
-            <ComingSoonPage 
-              title="Sales Dashboard"
-              subtitle="Track your sales performance and growth."
-              description="Our upcoming Sales Dashboard will provide you with powerful insights into your sales data, including revenue trends, top-selling products, and customer analytics."
-              features={[
-                'Real-time sales tracking',
-                'Revenue and profit analysis',
-                'Customer lifetime value',
-                'Sales forecasting',
-              ]}
-            />
-          )} 
-        />
+        <Route path="sales" element={<InvoiceManager />} />
         <Route path="invoices" element={<InvoiceManager />} />
         <Route path="purchases" element={<BillManager />} />
         <Route path="reports" element={<FinancialReports />}>

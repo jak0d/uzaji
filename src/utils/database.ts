@@ -1,4 +1,4 @@
-import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { openDB, DBSchema, IDBPDatabase, IDBPTransaction } from 'idb';
 
 // Enhanced Transaction model with new fields for redesign
 export interface Transaction {
@@ -134,6 +134,45 @@ export interface Invoice {
   updatedAt: string;
 }
 
+export interface BillItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  category: string;
+}
+
+export interface Bill {
+  id: string;
+  billNumber: string;
+  vendorId?: string;
+  vendorName: string;
+  vendorEmail?: string;
+  billDate: string;
+  dueDate: string;
+  status: 'draft' | 'pending' | 'paid' | 'overdue' | 'cancelled';
+  subtotal: number;
+  taxAmount: number;
+  totalAmount: number;
+  items: BillItem[];
+  notes?: string;
+  attachments?: string[];
+  createdAt: string;
+  updatedAt:string;
+}
+
+export interface Transfer {
+  id: string;
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  description: string;
+  date: string;
+  status: 'completed' | 'pending' | 'failed';
+  createdAt: string;
+}
+
 // Legal Firm Client Management Models
 export interface Client {
   id: string;
@@ -264,12 +303,22 @@ interface BookkeepingDB extends DBSchema {
     value: Invoice;
     indexes: { 'by-customer': string; 'by-status': string; 'by-date': string };
   };
+  bills: {
+    key: string;
+    value: Bill;
+    indexes: { 'by-vendor': string; 'by-status': string; 'by-date': string };
+  };
+  transfers: {
+    key: string;
+    value: Transfer;
+    indexes: { 'by-date': string; 'by-from-account': string; 'by-to-account': string; };
+  };
 }
 
 let db: IDBPDatabase<BookkeepingDB>;
 
 export async function initDB(): Promise<void> {
-  db = await openDB<BookkeepingDB>('bookkeeping-db', 4, {
+  db = await openDB<BookkeepingDB>('bookkeeping-db', 6, {
     async upgrade(db, oldVersion, _newVersion, transaction) {
       // Handle migration from version 1 to 2
       if (oldVersion < 1) {
@@ -381,12 +430,30 @@ export async function initDB(): Promise<void> {
         invoiceStore.createIndex('by-status', 'status');
         invoiceStore.createIndex('by-date', 'invoiceDate');
       }
+
+      if (oldVersion < 5) {
+        const billStore = db.createObjectStore('bills', {
+          keyPath: 'id',
+        });
+        billStore.createIndex('by-vendor', 'vendorName');
+        billStore.createIndex('by-status', 'status');
+        billStore.createIndex('by-date', 'billDate');
+      }
+
+      if (oldVersion < 6) {
+        const transferStore = db.createObjectStore('transfers', {
+          keyPath: 'id',
+        });
+        transferStore.createIndex('by-date', 'date');
+        transferStore.createIndex('by-from-account', 'fromAccountId');
+        transferStore.createIndex('by-to-account', 'toAccountId');
+      }
     },
   });
 }
 
 // Initialize default data for new users
-async function initializeDefaultData(transaction: any): Promise<void> {
+async function initializeDefaultData(transaction: IDBPTransaction<BookkeepingDB, ("transactions" | "accounts" | "expenseCategories")[], "readwrite">): Promise<void> {
   // Create default expense categories
   const defaultCategories: Omit<ExpenseCategory, 'id' | 'createdAt' | 'updatedAt'>[] = [
     { name: 'Office Supplies', description: 'Pens, paper, office equipment', isDefault: true, businessType: 'both', encrypted: false },
@@ -427,7 +494,7 @@ async function initializeDefaultData(transaction: any): Promise<void> {
 }
 
 // Migrate existing transactions to support new schema
-async function migrateExistingTransactions(transaction: any): Promise<void> {
+async function migrateExistingTransactions(transaction: IDBPTransaction<BookkeepingDB, ("transactions" | "accounts")[], "readwrite">): Promise<void> {
   const transactionStore = transaction.objectStore('transactions');
   const accountStore = transaction.objectStore('accounts');
   
@@ -605,11 +672,13 @@ export async function deleteService(id: string): Promise<void> {
 }
 
 // Settings operations
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function setSetting(key: string, value: any): Promise<void> {
   const database = await getDB();
   await database.put('settings', { key, value });
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getSetting(key: string): Promise<any> {
   const database = await getDB();
   const setting = await database.get('settings', key);
@@ -1086,3 +1155,80 @@ export async function deleteInvoice(id: string): Promise<void> {
   await database.delete('invoices', id);
 }
 
+// Bill operations
+export async function addBill(bill: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  const database = await getDB();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  const newBill: Bill = {
+    ...bill,
+    id,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await database.add('bills', newBill);
+  return id;
+}
+
+export async function getBills(): Promise<Bill[]> {
+  const database = await getDB();
+  return await database.getAll('bills');
+}
+
+export async function updateBill(id: string, updates: Partial<Bill>): Promise<void> {
+  const database = await getDB();
+  const bill = await database.get('bills', id);
+  if (bill) {
+    const updatedBill = {
+      ...bill,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    await database.put('bills', updatedBill);
+  }
+}
+
+export async function deleteBill(id: string): Promise<void> {
+  const database = await getDB();
+  await database.delete('bills', id);
+}
+
+// Transfer operations
+export async function addTransfer(transfer: Omit<Transfer, 'id' | 'createdAt'>): Promise<string> {
+  const database = await getDB();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  const newTransfer: Transfer = {
+    ...transfer,
+    id,
+    createdAt: now,
+  };
+
+  await database.add('transfers', newTransfer);
+  return id;
+}
+
+export async function getTransfers(): Promise<Transfer[]> {
+  const database = await getDB();
+  return await database.getAll('transfers');
+}
+
+export async function updateTransfer(id: string, updates: Partial<Transfer>): Promise<void> {
+  const database = await getDB();
+  const transfer = await database.get('transfers', id);
+  if (transfer) {
+    const updatedTransfer = {
+      ...transfer,
+      ...updates,
+    };
+    await database.put('transfers', updatedTransfer);
+  }
+}
+
+export async function deleteTransfer(id: string): Promise<void> {
+  const database = await getDB();
+  await database.delete('transfers', id);
+}

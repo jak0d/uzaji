@@ -1,51 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Plus, 
   Edit, 
   Trash2, 
   Eye, 
-  DollarSign, 
   Search,
-  Filter,
-  Calendar,
-  Building,
   FileText,
   Clock,
   CheckCircle,
   AlertCircle,
   XCircle
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
 import { BillForm } from './BillForm';
-
-interface Bill {
-  id: string;
-  billNumber: string;
-  vendorId?: string;
-  vendorName: string;
-  vendorEmail?: string;
-  billDate: string;
-  dueDate: string;
-  status: 'draft' | 'pending' | 'paid' | 'overdue' | 'cancelled';
-  subtotal: number;
-  taxAmount: number;
-  totalAmount: number;
-  items: BillItem[];
-  notes?: string;
-  attachments?: string[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface BillItem {
-  id: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-  category: string;
-}
+import {
+  getBills,
+  addBill,
+  updateBill,
+  deleteBill,
+  Bill,
+  addTransaction
+} from '../utils/database';
 
 interface BillManagerProps {
   className?: string;
@@ -54,7 +29,6 @@ interface BillManagerProps {
 export function BillManager({ className = '' }: BillManagerProps) {
   const { formatCurrency, formatDate, getThemeClasses } = useSettings();
   const themeClasses = getThemeClasses();
-  const navigate = useNavigate();
   
   const [bills, setBills] = useState<Bill[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,54 +37,31 @@ export function BillManager({ className = '' }: BillManagerProps) {
   const [showBillForm, setShowBillForm] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
 
-  useEffect(() => {
-    loadBills();
+  const loadBills = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const fetchedBills = await getBills();
+      setBills(fetchedBills);
+    } catch (error) {
+      console.error("Failed to load bills:", error);
+      // You might want to show an error message to the user
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  const loadBills = async () => {
-    // Mock data for demonstration
-    const mockBills: Bill[] = [
-      {
-        id: '1',
-        billNumber: 'BILL-2024-001',
-        vendorName: 'Office Supply Co.',
-        vendorEmail: 'billing@officesupply.com',
-        billDate: '2024-01-10',
-        dueDate: '2024-02-09',
-        status: 'pending',
-        subtotal: 500,
-        taxAmount: 50,
-        totalAmount: 550,
-        items: [
-          {
-            id: '1',
-            description: 'Office Supplies',
-            quantity: 1,
-            unitPrice: 500,
-            totalPrice: 500,
-            category: 'Office Supplies'
-          }
-        ],
-        notes: 'Monthly office supplies order',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-    ];
-    
-    setBills(mockBills);
-    setIsLoading(false);
-  };
+  useEffect(() => {
+    loadBills();
+  }, [loadBills]);
 
-  const handleSaveBill = (billData: Bill) => {
+  const handleSaveBill = async (billData: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (editingBill) {
-      setBills(prev => prev.map(bill => 
-        bill.id === editingBill.id ? { ...billData, id: editingBill.id } : bill
-      ));
+      await updateBill(editingBill.id, billData);
     } else {
-      const newBill = { ...billData, id: Date.now().toString() };
-      setBills(prev => [...prev, newBill]);
+      await addBill(billData);
     }
     setEditingBill(null);
+    loadBills();
   };
 
   const handleEditBill = (bill: Bill) => {
@@ -118,10 +69,29 @@ export function BillManager({ className = '' }: BillManagerProps) {
     setShowBillForm(true);
   };
 
-  const handleMarkAsPaid = (billId: string) => {
-    setBills(prev => prev.map(bill => 
-      bill.id === billId ? { ...bill, status: 'paid' as const, updatedAt: new Date().toISOString() } : bill
-    ));
+  const handleDeleteBill = async (billId: string) => {
+    if (window.confirm('Are you sure you want to delete this bill?')) {
+      await deleteBill(billId);
+      loadBills();
+    }
+  };
+
+  const handleMarkAsPaid = async (billId: string) => {
+    await updateBill(billId, { status: 'paid' });
+    const paidBill = bills.find(b => b.id === billId);
+    if (paidBill) {
+      await addTransaction({
+        date: new Date().toISOString().split('T')[0],
+        description: `Payment for Bill ${paidBill.billNumber} from ${paidBill.vendorName}`,
+        amount: paidBill.totalAmount,
+        type: 'expense',
+        category: 'Bill Payment',
+        vendor: paidBill.vendorName,
+        account: 'Default Account', // Or choose a relevant account
+        encrypted: false,
+      });
+    }
+    loadBills();
   };
 
   const getStatusIcon = (status: Bill['status']) => {
@@ -320,6 +290,13 @@ export function BillManager({ className = '' }: BillManagerProps) {
                           title="Edit Bill"
                         >
                           <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBill(bill.id)}
+                          className={`p-1 text-red-600 hover:text-red-700 rounded transition-colors`}
+                          title="Delete Bill"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                         {bill.status === 'pending' && (
                           <button 

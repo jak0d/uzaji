@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Download,
-  FileText,
   BarChart3,
   PieChart,
   Users,
@@ -10,12 +9,10 @@ import {
   TrendingUp,
   TrendingDown,
   Calendar,
-  RefreshCw,
-  Filter
+  RefreshCw
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
-import { getTransactions, getTransactionsByDateRange } from '../utils/database';
-import type { Transaction } from '../utils/database';
+import { getTransactionsByDateRange, getInvoices, getBills } from '../utils/database';
 
 interface AdvancedReportsProps {
   className?: string;
@@ -69,7 +66,7 @@ interface ReportData {
 }
 
 export function AdvancedReports({ className = '' }: AdvancedReportsProps) {
-  const { formatCurrency, formatDate, getThemeClasses } = useSettings();
+  const { formatCurrency, getThemeClasses } = useSettings();
   const themeClasses = getThemeClasses();
   
   const [dateRange, setDateRange] = useState({
@@ -98,26 +95,30 @@ export function AdvancedReports({ className = '' }: AdvancedReportsProps) {
 
   useEffect(() => {
     loadAdvancedReportData();
-  }, [dateRange]);
+  }, [dateRange, loadAdvancedReportData]);
 
-  const loadAdvancedReportData = async () => {
+  const loadAdvancedReportData = useCallback(async () => {
     setIsLoading(true);
     try {
       const transactions = await getTransactionsByDateRange(dateRange.startDate, dateRange.endDate);
+      const invoices = await getInvoices();
+      const bills = await getBills();
+
+      // Filter invoices and bills by date range
+      const filteredInvoices = invoices.filter(inv => inv.invoiceDate >= dateRange.startDate && inv.invoiceDate <= dateRange.endDate);
+      const filteredBills = bills.filter(bill => bill.billDate >= dateRange.startDate && bill.billDate <= dateRange.endDate);
       
       // Analyze sales data
       const salesTransactions = transactions.filter(t => t.type === 'income');
       const expenseTransactions = transactions.filter(t => t.type === 'expense');
       
-      // Sales by customer analysis
+      // Sales by customer analysis (from Invoices)
       const customerSales = new Map<string, { total: number; count: number }>();
-      salesTransactions.forEach(t => {
-        const customer = t.description.includes('from') ? 
-          t.description.split('from')[1]?.trim() || 'Unknown Customer' : 
-          'Direct Sale';
+      filteredInvoices.forEach(inv => {
+        const customer = inv.customerName || 'Unknown Customer';
         const existing = customerSales.get(customer) || { total: 0, count: 0 };
         customerSales.set(customer, {
-          total: existing.total + t.amount,
+          total: existing.total + inv.totalAmount,
           count: existing.count + 1
         });
       });
@@ -129,14 +130,16 @@ export function AdvancedReports({ className = '' }: AdvancedReportsProps) {
         averageOrderValue: data.total / data.count
       })).sort((a, b) => b.totalSales - a.totalSales);
 
-      // Sales by product/service analysis
+      // Sales by product/service analysis (from Invoice Items)
       const productSales = new Map<string, { total: number; count: number }>();
-      salesTransactions.forEach(t => {
-        const product = t.category || 'General Service';
-        const existing = productSales.get(product) || { total: 0, count: 0 };
-        productSales.set(product, {
-          total: existing.total + t.amount,
-          count: existing.count + 1
+      filteredInvoices.forEach(inv => {
+        inv.items.forEach(item => {
+          const product = item.description || 'General Service';
+          const existing = productSales.get(product) || { total: 0, count: 0 };
+          productSales.set(product, {
+            total: existing.total + item.totalPrice,
+            count: existing.count + item.quantity
+          });
         });
       });
 
@@ -144,10 +147,10 @@ export function AdvancedReports({ className = '' }: AdvancedReportsProps) {
         product,
         totalSales: data.total,
         quantity: data.count,
-        averagePrice: data.total / data.count
+        averagePrice: data.count > 0 ? data.total / data.count : 0
       })).sort((a, b) => b.totalSales - a.totalSales);
 
-      // Sales by category
+      // Sales by category (from transactions, as it's more general)
       const totalSales = salesTransactions.reduce((sum, t) => sum + t.amount, 0);
       const categorySales = new Map<string, number>();
       salesTransactions.forEach(t => {
@@ -161,15 +164,13 @@ export function AdvancedReports({ className = '' }: AdvancedReportsProps) {
         percentage: totalSales > 0 ? (total / totalSales) * 100 : 0
       })).sort((a, b) => b.totalSales - a.totalSales);
 
-      // Expense analysis by vendor
+      // Expense analysis by vendor (from Bills)
       const vendorExpenses = new Map<string, { total: number; count: number }>();
-      expenseTransactions.forEach(t => {
-        const vendor = t.description.includes('to') ? 
-          t.description.split('to')[1]?.trim() || 'Unknown Vendor' : 
-          'Direct Expense';
+      filteredBills.forEach(bill => {
+        const vendor = bill.vendorName || 'Unknown Vendor';
         const existing = vendorExpenses.get(vendor) || { total: 0, count: 0 };
         vendorExpenses.set(vendor, {
-          total: existing.total + t.amount,
+          total: existing.total + bill.totalAmount,
           count: existing.count + 1
         });
       });
@@ -181,7 +182,7 @@ export function AdvancedReports({ className = '' }: AdvancedReportsProps) {
         averageAmount: data.total / data.count
       })).sort((a, b) => b.totalExpenses - a.totalExpenses);
 
-      // Expense analysis by category
+      // Expense analysis by category (from transactions)
       const totalExpenses = expenseTransactions.reduce((sum, t) => sum + t.amount, 0);
       const categoryExpenses = new Map<string, { total: number; count: number }>();
       expenseTransactions.forEach(t => {
@@ -200,7 +201,7 @@ export function AdvancedReports({ className = '' }: AdvancedReportsProps) {
         transactionCount: data.count
       })).sort((a, b) => b.totalExpenses - a.totalExpenses);
 
-      // Monthly expense trend
+      // Monthly expense trend (from transactions)
       const monthlyExpenses = new Map<string, number>();
       expenseTransactions.forEach(t => {
         const month = new Date(t.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
@@ -234,7 +235,7 @@ export function AdvancedReports({ className = '' }: AdvancedReportsProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [dateRange]);
 
   const exportToCSV = () => {
     let csvContent = '';
@@ -370,7 +371,7 @@ export function AdvancedReports({ className = '' }: AdvancedReportsProps) {
           return (
             <button
               key={tab.id}
-              onClick={() => setSelectedView(tab.id as any)}
+              onClick={() => setSelectedView(tab.id as 'sales' | 'expenses' | 'comparison')}
               className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
                 selectedView === tab.id
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'

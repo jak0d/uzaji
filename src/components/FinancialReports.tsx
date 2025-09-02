@@ -6,17 +6,14 @@ import {
   TrendingUp, 
   Calendar,
   RefreshCw,
-  DollarSign,
-  Building,
   Scale,
   Brain,
   ArrowRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
-import { getTransactions, getTransactionsByDateRange } from '../utils/database';
+import { getTransactionsByDateRange, getInvoices, getBills } from '../utils/database';
 import { getBusinessType } from '../utils/businessConfig';
-import type { Transaction } from '../utils/database';
 
 interface FinancialReportsProps {
   className?: string;
@@ -99,11 +96,6 @@ export function FinancialReports({ className = '' }: FinancialReportsProps) {
   const [selectedReport, setSelectedReport] = useState<'profit-loss' | 'balance-sheet' | 'trial-balance'>('profit-loss');
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    loadReportData();
-    loadBusinessType();
-  }, [dateRange]);
-
   const loadBusinessType = async () => {
     try {
       const type = await getBusinessType();
@@ -115,12 +107,18 @@ export function FinancialReports({ className = '' }: FinancialReportsProps) {
     }
   };
 
-  const loadReportData = async () => {
+  useEffect(() => {
+    loadReportData();
+    loadBusinessType();
+  }, [dateRange, loadReportData]);
+
+  const loadReportData = useCallback(async () => {
     setIsLoading(true);
     try {
       const transactions = await getTransactionsByDateRange(dateRange.startDate, dateRange.endDate);
-      const allTransactions = await getTransactions();
-      
+      const invoices = await getInvoices();
+      const bills = await getBills();
+
       // Generate Profit & Loss data
       const revenue: { [category: string]: number } = {};
       const expenses: { [category: string]: number } = {};
@@ -136,15 +134,23 @@ export function FinancialReports({ className = '' }: FinancialReportsProps) {
       const totalRevenue = Object.values(revenue).reduce((sum, amount) => sum + amount, 0);
       const totalExpenses = Object.values(expenses).reduce((sum, amount) => sum + amount, 0);
       
-      // Generate Balance Sheet data (simplified)
+      // Generate Balance Sheet data
+      const accountsReceivable = invoices
+        .filter(inv => inv.status !== 'paid' && inv.status !== 'cancelled')
+        .reduce((sum, inv) => sum + inv.totalAmount, 0);
+
+      const accountsPayable = bills
+        .filter(bill => bill.status !== 'paid' && bill.status !== 'cancelled')
+        .reduce((sum, bill) => sum + bill.totalAmount, 0);
+
       const currentAssets = {
         'Cash and Cash Equivalents': totalRevenue - totalExpenses,
-        'Accounts Receivable': 0, // TODO: Calculate from invoices
-        'Inventory': 0
+        'Accounts Receivable': accountsReceivable,
+        'Inventory': 0 // Assuming no inventory tracking for now
       };
       
       const currentLiabilities = {
-        'Accounts Payable': 0, // TODO: Calculate from bills
+        'Accounts Payable': accountsPayable,
         'Accrued Expenses': 0
       };
       
@@ -227,7 +233,7 @@ export function FinancialReports({ className = '' }: FinancialReportsProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [dateRange]);
 
   const exportToPDF = () => {
     // TODO: Implement PDF export
@@ -440,7 +446,7 @@ export function FinancialReports({ className = '' }: FinancialReportsProps) {
           return (
             <button
               key={tab.id}
-              onClick={() => setSelectedReport(tab.id as any)}
+              onClick={() => setSelectedReport(tab.id as 'profit-loss' | 'balance-sheet' | 'trial-balance')}
               className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
                 selectedReport === tab.id
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
