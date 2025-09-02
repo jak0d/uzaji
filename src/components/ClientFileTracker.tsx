@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Plus, 
   Edit, 
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
+import { v4 as uuidv4 } from 'uuid';
 
 interface Client {
   id: string;
@@ -82,29 +83,86 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'files' | 'transactions' | 'notes' | 'documents'>('files');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
+  const [newClient, setNewClient] = useState<Omit<Client, 'id' | 'createdAt' | 'updatedAt'>>({ 
+    name: '', 
+    email: '', 
+    phone: '', 
+    address: '', 
+    totalOutstandingFees: 0, 
+    totalFundsHeld: 0 
+  });
 
-  useEffect(() => {
-    loadClients();
+  const loadClients = useCallback(async () => {
+    // Check if we already have clients in localStorage
+    const savedClients = localStorage.getItem('uzaji_clients');
+    
+    if (savedClients) {
+      setClients(JSON.parse(savedClients));
+    } else {
+      // Only load mock data if no saved clients exist
+      const mockClients: Client[] = [
+        {
+          id: '1',
+          name: 'John Smith',
+          email: 'john.smith@email.com',
+          phone: '(555) 123-4567',
+          totalOutstandingFees: 5000,
+          totalFundsHeld: 2000,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ];
+      
+      setClients(mockClients);
+      // Save mock data to localStorage
+      localStorage.setItem('uzaji_clients', JSON.stringify(mockClients));
+    }
+    
+    setIsLoading(false);
   }, []);
 
-  const loadClients = async () => {
-    // Mock data for demonstration
-    const mockClients: Client[] = [
-      {
-        id: '1',
-        name: 'John Smith',
-        email: 'john.smith@email.com',
-        phone: '(555) 123-4567',
-        totalOutstandingFees: 5000,
-        totalFundsHeld: 2000,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-    ];
+  // Load clients from localStorage on component mount
+  useEffect(() => {
+    loadClients();
+  }, [loadClients]);
+
+  // Save clients to localStorage whenever the clients array changes
+  useEffect(() => {
+    if (clients.length > 0) {
+      localStorage.setItem('uzaji_clients', JSON.stringify(clients));
+    }
+  }, [clients]);
+
+  const handleAddClient = () => {
+    if (!newClient.name.trim()) return;
     
-    setClients(mockClients);
-    setIsLoading(false);
+    const newClientWithId = {
+      ...newClient,
+      id: uuidv4(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    const updatedClients = [...clients, newClientWithId];
+    setClients(updatedClients);
+    
+    // Reset form
+    setNewClient({ 
+      name: '', 
+      email: '', 
+      phone: '', 
+      address: '', 
+      totalOutstandingFees: 0, 
+      totalFundsHeld: 0 
+    });
+    
+    setIsAddClientModalOpen(false);
+    
+    // Show success message
+    alert('Client added successfully!');
   };
+
 
   const loadClientFiles = async (clientId: string) => {
     // Mock data for demonstration
@@ -154,33 +212,7 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
 
   return (
     <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 ${className}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center space-x-4">
-          {selectedClient && (
-            <button
-              onClick={() => setSelectedClient(null)}
-              className={`flex items-center space-x-2 ${themeClasses.textSecondary} hover:${themeClasses.text} transition-colors`}
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back to Clients</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {!selectedClient ? (
-        // Client List View
-        <ClientListView 
-          clients={filteredClients}
-          searchTerm={searchTerm}
-          onSearchChange={setSearchTerm}
-          onClientSelect={handleClientSelect}
-          themeClasses={themeClasses}
-          formatCurrency={formatCurrency}
-        />
-      ) : (
-        // Client Detail View
+      {selectedClient ? (
         <ClientDetailView
           client={selectedClient}
           files={clientFiles}
@@ -189,6 +221,113 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
           themeClasses={themeClasses}
           formatCurrency={formatCurrency}
         />
+      ) : (
+        <ClientListView
+          clients={filteredClients}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          onClientSelect={handleClientSelect}
+          onAddClientClick={() => setIsAddClientModalOpen(true)}
+          themeClasses={themeClasses}
+          formatCurrency={formatCurrency}
+        />
+      )}
+
+      {/* Add Client Modal */}
+      {isAddClientModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className={`${themeClasses.cardBackground} rounded-lg shadow-xl w-full max-w-md p-6`}>
+            <h2 className="text-xl font-semibold mb-4">Add New Client</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Full Name *</label>
+                <input
+                  type="text"
+                  value={newClient.name}
+                  onChange={(e) => setNewClient({...newClient, name: e.target.value})}
+                  className="w-full p-2 border rounded"
+                  placeholder="John Doe"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Email</label>
+                <input
+                  type="email"
+                  value={newClient.email}
+                  onChange={(e) => setNewClient({...newClient, email: e.target.value})}
+                  className="w-full p-2 border rounded"
+                  placeholder="john@example.com"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Phone</label>
+                <input
+                  type="tel"
+                  value={newClient.phone}
+                  onChange={(e) => setNewClient({...newClient, phone: e.target.value})}
+                  className="w-full p-2 border rounded"
+                  placeholder="(123) 456-7890"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Address</label>
+                <textarea
+                  value={newClient.address}
+                  onChange={(e) => setNewClient({...newClient, address: e.target.value})}
+                  className="w-full p-2 border rounded"
+                  rows={2}
+                  placeholder="123 Main St, City, Country"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Initial Fees</label>
+                  <input
+                    type="number"
+                    value={newClient.totalOutstandingFees}
+                    onChange={(e) => setNewClient({...newClient, totalOutstandingFees: Number(e.target.value)})}
+                    className="w-full p-2 border rounded"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Funds Held</label>
+                  <input
+                    type="number"
+                    value={newClient.totalFundsHeld}
+                    onChange={(e) => setNewClient({...newClient, totalFundsHeld: Number(e.target.value)})}
+                    className="w-full p-2 border rounded"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setIsAddClientModalOpen(false)}
+                className="px-4 py-2 border rounded hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddClient}
+                disabled={!newClient.name.trim()}
+                className={`px-4 py-2 rounded text-white ${!newClient.name.trim() ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+              >
+                Add Client
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -201,7 +340,7 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
  * This component displays a list of clients with their respective information.
  * It also allows users to search for clients and select a client to view their details.
  */
-function ClientListView({ clients, searchTerm, onSearchChange, onClientSelect, themeClasses, formatCurrency }: any) {
+function ClientListView({ clients, searchTerm, onSearchChange, onClientSelect, onAddClientClick, themeClasses, formatCurrency }: any) {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -213,7 +352,10 @@ function ClientListView({ clients, searchTerm, onSearchChange, onClientSelect, t
             Manage client relationships and legal file tracking
           </p>
         </div>
-        <button className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm hover:shadow-md">
+        <button 
+          onClick={onAddClientClick}
+          className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm hover:shadow-md"
+        >
           <Plus className="w-4 h-4" />
           <span>Add New Client</span>
         </button>
@@ -275,7 +417,10 @@ function ClientListView({ clients, searchTerm, onSearchChange, onClientSelect, t
           <p className={`${themeClasses.textSecondary} mb-4`}>
             Add your first client to start tracking legal files and finances.
           </p>
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <button 
+            onClick={onAddClientClick}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
             Add First Client
           </button>
         </div>
