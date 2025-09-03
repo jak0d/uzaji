@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
+import { deleteClient, deleteClientFile } from '../utils/database';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Client {
@@ -194,6 +195,40 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
     loadClientFiles(client.id);
   };
 
+  const handleBackToClients = () => {
+    setSelectedClient(null);
+  };
+
+  const handleDeleteClient = async (clientId: string) => {
+    try {
+      // Delete client from database
+      await deleteClient(clientId);
+      
+      // Also delete all files associated with this client
+      const clientFiles = JSON.parse(localStorage.getItem('uzaji_clientFiles') || '[]');
+      const remainingFiles = clientFiles.filter((file: any) => file.clientId !== clientId);
+      localStorage.setItem('uzaji_clientFiles', JSON.stringify(remainingFiles));
+      
+      // Update the clients list
+      const updatedClients = clients.filter(client => client.id !== clientId);
+      setClients(updatedClients);
+      
+      // If the deleted client was selected, clear the selection
+      if (selectedClient?.id === clientId) {
+        setSelectedClient(null);
+        setClientFiles([]);
+      }
+      
+      // Update local storage
+      localStorage.setItem('uzaji_clients', JSON.stringify(updatedClients));
+      
+      console.log('Client deleted successfully');
+    } catch (error) {
+      console.error('Error deleting client:', error);
+      alert('Failed to delete client. Please try again.');
+    }
+  };
+
   const filteredClients = clients.filter(client =>
     client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     client.email?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -220,6 +255,7 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
           onTabChange={setActiveTab}
           themeClasses={themeClasses}
           formatCurrency={formatCurrency}
+          onBack={handleBackToClients}
         />
       ) : (
         <ClientListView
@@ -227,6 +263,7 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
           onClientSelect={handleClientSelect}
+          onDeleteClient={handleDeleteClient}
           onAddClientClick={() => setIsAddClientModalOpen(true)}
           themeClasses={themeClasses}
           formatCurrency={formatCurrency}
@@ -340,7 +377,7 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
  * This component displays a list of clients with their respective information.
  * It also allows users to search for clients and select a client to view their details.
  */
-function ClientListView({ clients, searchTerm, onSearchChange, onClientSelect, onAddClientClick, themeClasses, formatCurrency }: any) {
+function ClientListView({ clients, searchTerm, onSearchChange, onClientSelect, onDeleteClient, onAddClientClick, themeClasses, formatCurrency }: any) {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -406,6 +443,27 @@ function ClientListView({ clients, searchTerm, onSearchChange, onClientSelect, o
                 <span className="font-medium text-green-600">{formatCurrency(client.totalFundsHeld)}</span>
               </div>
             </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => onClientSelect(client)}
+                className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                title="View client details"
+              >
+                <Eye size={18} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm(`Are you sure you want to delete ${client.name}? This action cannot be undone.`)) {
+                    onDeleteClient(client.id);
+                  }
+                }}
+                className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                title="Delete client"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -430,9 +488,18 @@ function ClientListView({ clients, searchTerm, onSearchChange, onClientSelect, o
 }
 
 // Client Detail View Component
-function ClientDetailView({ client, files, activeTab, onTabChange, themeClasses, formatCurrency }: any) {
+function ClientDetailView({ client, files, activeTab, onTabChange, themeClasses, formatCurrency, onBack }: any) {
   return (
     <div>
+      {/* Back Button */}
+      <button 
+        onClick={onBack}
+        className={`flex items-center space-x-2 mb-4 text-sm font-medium ${themeClasses.textSecondary} hover:${themeClasses.text} transition-colors`}
+      >
+        <ArrowLeft className="w-4 h-4" />
+        <span>Back to Clients & Files</span>
+      </button>
+      
       {/* Client Header */}
       <div className={`${themeClasses.cardBackground} rounded-lg shadow-sm p-6 border ${themeClasses.border} mb-6`}>
         <div className="flex items-start justify-between">
