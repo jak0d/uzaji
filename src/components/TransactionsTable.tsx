@@ -16,6 +16,7 @@ import {
   ChevronUp,
   RefreshCw
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
 import { getTransactions, deleteTransaction } from '../utils/database';
 import { getBusinessType } from '../utils/businessConfig';
@@ -47,6 +48,7 @@ export function TransactionsTable({
   onEditTransaction,
   className = '' 
 }: TransactionsTableProps) {
+  const navigate = useNavigate();
   const { formatCurrency, formatDate, getThemeClasses } = useSettings();
   const themeClasses = getThemeClasses();
   
@@ -73,9 +75,18 @@ export function TransactionsTable({
   
   const [showFilters, setShowFilters] = useState(false);
   const [selectedTransactions, setSelectedTransactions] = useState<string[]>([]);
+  const [currentBusinessType, setCurrentBusinessType] = useState<'general' | 'legal' | null>(null);
 
   useEffect(() => {
     loadData();
+    
+    // Load business type
+    const loadBusinessType = async () => {
+      const type = await getBusinessType();
+      setCurrentBusinessType(type || 'general');
+    };
+    
+    loadBusinessType();
   }, []);
 
   useEffect(() => {
@@ -138,12 +149,20 @@ export function TransactionsTable({
 
     // Apply sorting
     filtered.sort((a, b) => {
-      const aValue = a[sort.field];
-      const bValue = b[sort.field];
+      let aValue = a[sort.field];
+      let bValue = b[sort.field];
+      
+      // Handle undefined/null values
+      if (aValue === undefined || aValue === null) return sort.direction === 'desc' ? -1 : 1;
+      if (bValue === undefined || bValue === null) return sort.direction === 'desc' ? 1 : -1;
+      
+      // Convert to string for consistent comparison
+      const aString = String(aValue).toLowerCase();
+      const bString = String(bValue).toLowerCase();
       
       let comparison = 0;
-      if (aValue < bValue) comparison = -1;
-      if (aValue > bValue) comparison = 1;
+      if (aString < bString) comparison = -1;
+      if (aString > bString) comparison = 1;
       
       return sort.direction === 'desc' ? -comparison : comparison;
     });
@@ -258,13 +277,40 @@ export function TransactionsTable({
 
   return (
     <div className={className}>
+      {/* Navigation Buttons */}
+      <div className="px-8 pt-8 flex items-center space-x-4">
+        <button 
+          onClick={() => navigate('/dashboard')}
+          className="flex items-center text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors mb-4"
+        >
+          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Dashboard
+        </button>
+        {currentBusinessType !== 'general' && (
+          <>
+            <span className="text-gray-400 mb-4">|</span>
+            <button 
+              onClick={() => navigate('/clients')}
+              className="flex items-center text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors mb-4"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+              Clients and Files
+            </button>
+          </>
+        )}
+      </div>
+      
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 px-8">
         <div>
-          <h1 className={`text-2xl font-bold ${themeClasses.text}`}>
+          <h1 className={`text-2xl font-semibold ${themeClasses.text}`}>
             All Transactions
           </h1>
-          <p className={`${themeClasses.textSecondary} mt-1`}>
+          <p className={`${themeClasses.textSecondary} text-sm mt-1`}>
             {filteredTransactions.length} of {transactions.length} transactions
           </p>
         </div>
@@ -417,7 +463,7 @@ export function TransactionsTable({
       )}
 
       {/* Table */}
-      <div className={`${themeClasses.cardBackground} rounded-lg shadow-sm overflow-hidden ${themeClasses.border} border`}>
+      <div className={`${themeClasses.cardBackground} rounded-lg shadow-sm overflow-hidden ${themeClasses.border} border mx-8 mb-8`}>
         {filteredTransactions.length === 0 ? (
           <div className="p-8 text-center">
             <p className={`${themeClasses.textSecondary} mb-4`}>

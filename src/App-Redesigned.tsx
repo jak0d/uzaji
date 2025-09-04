@@ -24,6 +24,7 @@ import { LandingPage } from './components/LandingPage';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { Sitemap } from './components/Sitemap';
 import { OnboardingWizard } from './components/OnboardingWizard';
+import { LegalFileForm } from './components/LegalFileForm';
 import { useAuth } from './hooks/useAuth';
 import { useAnalytics } from './hooks/useAnalytics';
 import { initDB, needsOnboarding } from './utils/database';
@@ -269,7 +270,12 @@ function AppContent() {
           } 
         />
         <Route path="products" element={<ProductsServicesManager />} />
-        <Route path="clients" element={<ClientFileTracker />} />
+        <Route path="clients">
+          <Route index element={<ClientFileTracker />} />
+          <Route path=":clientId/files/new" element={<LegalFileForm mode="create" />} />
+          <Route path=":clientId/files/:fileId" element={<LegalFileForm mode="view" />} />
+          <Route path=":clientId/files/:fileId/edit" element={<LegalFileForm mode="edit" />} />
+        </Route>
         <Route 
           path="sales" 
           element={(

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Plus, 
   Edit, 
@@ -6,16 +6,14 @@ import {
   FileText, 
   DollarSign, 
   Users, 
-  Calendar,
   Search,
-  Filter,
   ArrowLeft,
   Eye,
   Download
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
-import { deleteClient, deleteClientFile } from '../utils/database';
+import { deleteClient } from '../utils/database';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Client {
@@ -34,6 +32,9 @@ interface ClientFile {
   id: string;
   clientId: string;
   fileName: string;
+  caseNumber?: string;
+  caseType?: string;
+  court?: string;
   dateOpened: string;
   feesToBePaid: number;
   depositPaid: number;
@@ -44,29 +45,9 @@ interface ClientFile {
   totalPaid: number;
   netSummary: number;
   status: 'active' | 'closed' | 'pending';
+  description?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-interface FileExpense {
-  id: string;
-  fileId: string;
-  date: string;
-  description: string;
-  amount: number;
-  vendor?: string;
-  isReimbursable: boolean;
-  attachment?: string;
-  createdAt: string;
-}
-
-interface ExtraFee {
-  id: string;
-  fileId: string;
-  date: string;
-  description: string;
-  amount: number;
-  createdAt: string;
 }
 
 interface ClientFileTrackerProps {
@@ -127,6 +108,13 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
   useEffect(() => {
     loadClients();
   }, [loadClients]);
+  
+  // Reload files when selected client changes
+  useEffect(() => {
+    if (selectedClient) {
+      loadClientFiles(selectedClient.id);
+    }
+  }, [selectedClient?.id]); // Add selectedClient.id as dependency
 
   // Save clients to localStorage whenever the clients array changes
   useEffect(() => {
@@ -165,30 +153,47 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
   };
 
 
-  const loadClientFiles = async (clientId: string) => {
-    // Mock data for demonstration
-    const mockFiles: ClientFile[] = [
-      {
-        id: '1',
-        clientId,
-        fileName: 'Smith vs. ABC Corp - Case #2024-001',
-        dateOpened: '2024-01-15',
-        feesToBePaid: 3000,
-        depositPaid: 1500,
-        balanceRemaining: 1500,
-        totalExpenses: 500,
-        totalExtraFees: 200,
-        totalFeesCharged: 3200,
-        totalPaid: 1500,
-        netSummary: 2200,
-        status: 'active',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+  const loadClientFiles = useCallback(async (clientId: string) => {
+    try {
+      // Try to load from localStorage first
+      const savedFiles = localStorage.getItem('uzaji_clientFiles');
+      let files: ClientFile[] = [];
+      
+      if (savedFiles) {
+        files = JSON.parse(savedFiles).filter((file: ClientFile) => file.clientId === clientId);
       }
-    ];
-    
-    setClientFiles(mockFiles);
-  };
+      
+      // If no saved files, use mock data for this client
+      if (files.length === 0) {
+        files = [
+          {
+            id: '1',
+            clientId,
+            fileName: 'Smith vs. ABC Corp - Case #2024-001',
+            dateOpened: '2024-01-15',
+            feesToBePaid: 3000,
+            depositPaid: 1500,
+            balanceRemaining: 1500,
+            totalExpenses: 500,
+            totalExtraFees: 200,
+            totalFeesCharged: 3200,
+            totalPaid: 1500,
+            netSummary: 2200,
+            status: 'active',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }
+        ];
+        // Save mock data to localStorage
+        localStorage.setItem('uzaji_clientFiles', JSON.stringify(files));
+      }
+      
+      setClientFiles(files);
+    } catch (error) {
+      console.error('Error loading client files:', error);
+      setClientFiles([]);
+    }
+  }, []);
 
   const handleClientSelect = (client: Client) => {
     setSelectedClient(client);
@@ -246,7 +251,20 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
   }
 
   return (
-    <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 ${className}`}>
+    <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 ${className}`}>
+      {/* Navigation Buttons */}
+      <div className="px-4 pt-2 pb-4 flex items-center space-x-4">
+        <button 
+          onClick={() => navigate('/dashboard')}
+          className="flex items-center text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+        >
+          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Dashboard
+        </button>
+      </div>
+      
       {selectedClient ? (
         <ClientDetailView
           client={selectedClient}
@@ -557,7 +575,12 @@ function ClientDetailView({ client, files, activeTab, onTabChange, themeClasses,
 
       {/* Tab Content */}
       {activeTab === 'files' && (
-        <ClientFilesTab files={files} themeClasses={themeClasses} formatCurrency={formatCurrency} />
+        <ClientFilesTab 
+          files={files} 
+          themeClasses={themeClasses} 
+          formatCurrency={formatCurrency} 
+          clientId={client.id} 
+        />
       )}
       {activeTab === 'transactions' && (
         <div className={`${themeClasses.cardBackground} rounded-lg shadow-sm p-6 border ${themeClasses.border}`}>
@@ -579,13 +602,22 @@ function ClientDetailView({ client, files, activeTab, onTabChange, themeClasses,
 }
 
 // Client Files Tab Component
-function ClientFilesTab({ files, themeClasses, formatCurrency }: any) {
+function ClientFilesTab({ files, themeClasses, formatCurrency, clientId }: any) {
+  const navigate = useNavigate();
+  
+  const handleAddFile = () => {
+    navigate(`/clients/${clientId}/files/new`);
+  };
+
   return (
     <div className={`${themeClasses.cardBackground} rounded-lg shadow-sm border ${themeClasses.border}`}>
       <div className="p-6 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between">
           <h3 className={`text-lg font-semibold ${themeClasses.text}`}>Legal Files</h3>
-          <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <button 
+            onClick={handleAddFile}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
             <Plus className="w-4 h-4" />
             <span>Add New File</span>
           </button>
@@ -599,7 +631,10 @@ function ClientFilesTab({ files, themeClasses, formatCurrency }: any) {
           <p className={`${themeClasses.textSecondary} mb-4`}>
             Add the first legal file for this client to start tracking finances.
           </p>
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <button 
+            onClick={handleAddFile}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
             Add First File
           </button>
         </div>
@@ -664,13 +699,69 @@ function ClientFilesTab({ files, themeClasses, formatCurrency }: any) {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex items-center space-x-2">
-                      <button className={`p-1 ${themeClasses.textSecondary} hover:${themeClasses.text} rounded transition-colors`}>
+                      <button 
+                        onClick={() => navigate(`/clients/${clientId}/files/${file.id}`)}
+                        className={`p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors ${themeClasses.textSecondary} hover:${themeClasses.text}`}
+                        title="View File"
+                      >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button className={`p-1 ${themeClasses.textSecondary} hover:${themeClasses.text} rounded transition-colors`}>
+                      <button 
+                        onClick={() => navigate(`/clients/${clientId}/files/${file.id}/edit`)}
+                        className={`p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors ${themeClasses.textSecondary} hover:text-blue-600 dark:hover:text-blue-400`}
+                        title="Edit File"
+                      >
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button className={`p-1 ${themeClasses.textSecondary} hover:${themeClasses.text} rounded transition-colors`}>
+                      <button 
+                        onClick={async () => {
+                          if (window.confirm('Are you sure you want to delete this file? This action cannot be undone.')) {
+                            try {
+                              const existingFiles = JSON.parse(localStorage.getItem('uzaji_clientFiles') || '[]');
+                              const updatedFiles = existingFiles.filter((f: ClientFile) => f.id !== file.id);
+                              localStorage.setItem('uzaji_clientFiles', JSON.stringify(updatedFiles));
+                              // Refresh the files list
+                              window.location.reload();
+                            } catch (error) {
+                              console.error('Error deleting file:', error);
+                              alert('Failed to delete file. Please try again.');
+                            }
+                          }
+                        }}
+                        className={`p-1.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors ${themeClasses.textSecondary} hover:text-red-600 dark:hover:text-red-400`}
+                        title="Delete File"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => {
+                          // Generate a simple text file with file details
+                          const fileContent = `File Details
+==========================
+File Name: ${file.fileName}
+Case Number: ${file.caseNumber || 'N/A'}
+Date Opened: ${new Date(file.dateOpened).toLocaleDateString()}
+Fees to be Paid: ${formatCurrency(file.feesToBePaid)}
+Deposit Paid: ${formatCurrency(file.depositPaid)}
+Balance Remaining: ${formatCurrency(file.balanceRemaining)}
+Status: ${file.status.charAt(0).toUpperCase() + file.status.slice(1)}
+
+Description:
+${file.description || 'No description provided'}`;
+                          
+                          const blob = new Blob([fileContent], { type: 'text/plain' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `file-details-${file.fileName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.txt`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                        }}
+                        className={`p-1.5 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors ${themeClasses.textSecondary} hover:text-green-600 dark:hover:text-green-400`}
+                        title="Download File Details"
+                      >
                         <Download className="w-4 h-4" />
                       </button>
                     </div>
