@@ -9,8 +9,10 @@ export interface Transaction {
   type: 'income' | 'expense';
   category: string;
   subcategory?: string;
-  customer?: string;
-  vendor?: string;
+  customer?: string;  // For general business type
+  vendor?: string;    // For general business type
+  clientId?: string;  // For legal firm business type
+  clientFileId?: string; // For legal firm business type
   productId?: string; // Keep for backward compatibility
   productServiceId?: string; // New field for enhanced workflow
   account: string;

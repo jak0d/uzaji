@@ -1,20 +1,16 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Package } from 'lucide-react';
+import { ArrowLeft, Save, Package, User, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { addTransaction } from '../utils/database';
-import { getProducts, getServices } from '../utils/database';
+import { addTransaction, getClients, getClientFiles, getBusinessConfig, getAccounts, getProducts, getServices } from '../utils/database';
+import type { Client, ClientFile, Product, Service, Account } from '../utils/database';
 import { UzajiLogo } from './UzajiLogo';
 import { useSettings } from '../hooks/useSettings';
 import { useTranslation } from '../hooks/useTranslation';
 import { trackBusiness, trackFeature } from '../utils/analytics';
-import { getAccounts } from '../utils/database';
-import type { Product, Service, Account } from '../utils/database';
 
-interface TransactionFormProps {
-  transactionToEdit?: Transaction | null;
-}
+interface TransactionFormProps {}
 
-export function TransactionForm({ transactionToEdit }: TransactionFormProps) {
+export function TransactionForm({}: TransactionFormProps) {
   const { settings, formatCurrency, getThemeClasses } = useSettings();
   const { t } = useTranslation(settings.language);
   const themeClasses = getThemeClasses();
@@ -27,11 +23,16 @@ export function TransactionForm({ transactionToEdit }: TransactionFormProps) {
     category: '',
     productId: '',
     account: '',
+    clientId: '',
+    clientFileId: '',
     date: new Date().toISOString().split('T')[0],
   });
   const [products, setProducts] = useState<Product[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [clientFiles, setClientFiles] = useState<ClientFile[]>([]);
+  const [isLegalFirm, setIsLegalFirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -48,14 +49,39 @@ export function TransactionForm({ transactionToEdit }: TransactionFormProps) {
 
   const loadInitialData = async () => {
     try {
-      const [productsData, servicesData, accountsData] = await Promise.all([
+      const [productsData, servicesData, accountsData, businessConfig] = await Promise.all([
         getProducts(),
         getServices(),
         getAccounts(),
+        getBusinessConfig()
       ]);
+      
       setProducts(productsData);
       setServices(servicesData);
       setAccounts(accountsData);
+      
+      // Check if business type is legal firm
+      const isLegal = businessConfig?.type === 'legal';
+      setIsLegalFirm(isLegal);
+      
+      // Load clients if this is a legal firm
+      if (isLegal) {
+        const clientsData = await getClients();
+        setClients(clientsData);
+        
+        // If there's a client ID in the query params, load their files
+        const urlParams = new URLSearchParams(window.location.search);
+        const clientId = urlParams.get('clientId');
+        if (clientId) {
+          const files = await getClientFiles(clientId);
+          setClientFiles(files);
+          setFormData(prev => ({
+            ...prev,
+            clientId,
+            clientFileId: files.length > 0 ? files[0].id : ''
+          }));
+        }
+      }
 
       if (accountsData.length > 0) {
         const defaultAccount = accountsData.find(acc => acc.isDefault);
@@ -69,12 +95,38 @@ export function TransactionForm({ transactionToEdit }: TransactionFormProps) {
     }
   };
 
+  // Handle client selection change
+  const handleClientChange = async (clientId: string) => {
+    if (!clientId) {
+      setClientFiles([]);
+      setFormData(prev => ({
+        ...prev,
+        clientId: '',
+        clientFileId: ''
+      }));
+      return;
+    }
+    
+    try {
+      const files = await getClientFiles(clientId);
+      setClientFiles(files);
+      setFormData(prev => ({
+        ...prev,
+        clientId,
+        clientFileId: files.length > 0 ? files[0].id : ''
+      }));
+    } catch (error) {
+      console.error('Failed to load client files:', error);
+      // Handle error appropriately
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      await addTransaction({
+      const transactionData: any = {
         description: formData.description,
         amount: parseFloat(formData.amount),
         type: formData.type,
@@ -83,7 +135,17 @@ export function TransactionForm({ transactionToEdit }: TransactionFormProps) {
         account: formData.account,
         date: formData.date,
         encrypted: true,
-      });
+      };
+      
+      // Add client and file references for legal firms
+      if (isLegalFirm && formData.clientId) {
+        transactionData.clientId = formData.clientId;
+        if (formData.clientFileId) {
+          transactionData.clientFileId = formData.clientFileId;
+        }
+      }
+      
+      await addTransaction(transactionData);
 
       // Track successful transaction creation
       trackBusiness('transaction_created', formData.type, parseFloat(formData.amount));
@@ -291,6 +353,53 @@ export function TransactionForm({ transactionToEdit }: TransactionFormProps) {
                 ))}
               </select>
             </div>
+
+            {/* Client Selection (Legal Firm Only) */}
+            {isLegalFirm && (
+              <>
+                <div>
+                  <label htmlFor="client" className={`block text-sm font-medium ${themeClasses.text} mb-2 flex items-center`}>
+                    <User className="w-4 h-4 mr-2" />
+                    {t('clients.client') || 'Client'}
+                  </label>
+                  <select
+                    id="client"
+                    value={formData.clientId}
+                    onChange={(e) => handleClientChange(e.target.value)}
+                    className={`w-full px-4 py-3 ${themeClasses.border} border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${themeClasses.cardBackground} ${themeClasses.text}`}
+                  >
+                    <option value="">{t('clients.selectClient') || 'Select a client'}</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {formData.clientId && clientFiles.length > 0 && (
+                  <div>
+                    <label htmlFor="clientFile" className={`block text-sm font-medium ${themeClasses.text} mb-2 flex items-center`}>
+                      <FileText className="w-4 h-4 mr-2" />
+                      {t('clients.clientFile') || 'Client File'}
+                    </label>
+                    <select
+                      id="clientFile"
+                      value={formData.clientFileId}
+                      onChange={(e) => setFormData(prev => ({ ...prev, clientFileId: e.target.value }))}
+                      className={`w-full px-4 py-3 ${themeClasses.border} border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${themeClasses.cardBackground} ${themeClasses.text}`}
+                    >
+                      <option value="">{t('clients.selectFile') || 'Select a file'}</option>
+                      {clientFiles.map((file) => (
+                        <option key={file.id} value={file.id}>
+                          {file.fileName} - {file.status}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
+            )}
 
             <div>
               <label htmlFor="date" className={`block text-sm font-medium ${themeClasses.text} mb-2`}>

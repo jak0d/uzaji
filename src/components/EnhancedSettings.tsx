@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
   Building, 
@@ -12,7 +13,9 @@ import {
   Settings as SettingsIcon,
   Shield,
   Download,
-  Upload
+  Upload,
+  AlertTriangle,
+  RotateCcw
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 import { 
@@ -78,6 +81,11 @@ export function EnhancedSettings({ user, onLogout, onBack, className = '' }: Enh
   });
   const [isSavingCategory, setIsSavingCategory] = useState(false);
   const [categoryErrors, setCategoryErrors] = useState<FormErrors>({});
+  
+  // Restart Onboarding states
+  const [showRestartDialog, setShowRestartDialog] = useState(false);
+  const [restartConfirmation, setRestartConfirmation] = useState('');
+  const [isRestarting, setIsRestarting] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -243,6 +251,41 @@ export function EnhancedSettings({ user, onLogout, onBack, className = '' }: Enh
   const importData = () => {
     // This would import user data - placeholder for now
     console.log('Import data functionality would be implemented here');
+  };
+
+  const handleRestartOnboarding = async () => {
+    if (restartConfirmation !== 'Onboarding') return;
+    
+    setIsRestarting(true);
+    try {
+      // Clear all local storage and session storage
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Clear IndexedDB
+      const databases = await window.indexedDB.databases();
+      databases.forEach(db => {
+        if (db.name) {
+          window.indexedDB.deleteDatabase(db.name);
+        }
+      });
+      
+      // Clear service worker caches
+      if ('serviceWorker' in navigator && 'caches' in window) {
+        const cacheKeys = await caches.keys();
+        await Promise.all(cacheKeys.map(key => caches.delete(key)));
+      }
+      
+      // Force a full page reload to reset the app state
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Error during reset:', error);
+      setError('Failed to reset onboarding. Please refresh the page and try again.');
+    } finally {
+      setIsRestarting(false);
+      setShowRestartDialog(false);
+      setRestartConfirmation('');
+    }
   };
 
   if (isLoading) {
@@ -666,14 +709,24 @@ export function EnhancedSettings({ user, onLogout, onBack, className = '' }: Enh
                 </button>
               </div>
 
-              <div className="border-t pt-6">
-                <h3 className={`font-medium ${themeClasses.text} mb-4`}>Account Actions</h3>
-                <button
-                  onClick={onLogout}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Sign Out
-                </button>
+              <div className="border-t pt-6 space-y-4">
+                <h3 className={`font-medium ${themeClasses.text} mb-2`}>Account Actions</h3>
+                <div className="flex flex-col space-y-3">
+                  <button
+                    onClick={onLogout}
+                    className="w-full md:w-auto px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-left flex items-center justify-center space-x-2"
+                  >
+                    <span>Sign Out</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => setShowRestartDialog(true)}
+                    className="w-full md:w-auto px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-left flex items-center justify-center space-x-2"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Restart Onboarding</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -750,6 +803,79 @@ export function EnhancedSettings({ user, onLogout, onBack, className = '' }: Enh
                   <>
                     <Check className="w-4 h-4" />
                     <span>{editingCategory ? 'Update' : 'Add'} Category</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Restart Onboarding Confirmation Dialog */}
+      {showRestartDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className={`${themeClasses.cardBackground} rounded-2xl shadow-2xl max-w-md w-full overflow-hidden`}>
+            <div className={`p-6 border-b ${themeClasses.border} flex items-center space-x-3`}>
+              <AlertTriangle className="w-6 h-6 text-amber-500" />
+              <h2 className={`text-xl font-bold ${themeClasses.text}`}>
+                Restart Onboarding?
+              </h2>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <p className={`${themeClasses.text} mb-4`}>
+                Restarting onboarding will erase all your data and reset your account back to zero.
+                <span className="font-semibold text-amber-600 dark:text-amber-400 block mt-2">
+                  This cannot be undone.
+                </span>
+              </p>
+              
+              <div>
+                <label className={`block text-sm font-medium ${themeClasses.text} mb-2`}>
+                  To confirm, please type <span className="font-mono bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded">Onboarding</span> below:
+                </label>
+                <input
+                  type="text"
+                  value={restartConfirmation}
+                  onChange={(e) => setRestartConfirmation(e.target.value)}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    themeClasses.cardBackground
+                  } ${themeClasses.border} ${themeClasses.text}`}
+                  placeholder="Type 'Onboarding' to confirm"
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+
+            <div className={`p-4 border-t ${themeClasses.border} flex items-center justify-end space-x-3`}>
+              <button
+                onClick={() => {
+                  setShowRestartDialog(false);
+                  setRestartConfirmation('');
+                }}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                disabled={isRestarting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRestartOnboarding}
+                disabled={restartConfirmation !== 'Onboarding' || isRestarting}
+                className={`px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
+                  restartConfirmation === 'Onboarding' && !isRestarting
+                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                {isRestarting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Resetting...</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>Confirm Reset</span>
                   </>
                 )}
               </button>

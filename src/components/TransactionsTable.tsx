@@ -6,21 +6,16 @@ import {
   Plus, 
   Edit, 
   Trash2, 
-  Eye,
-  Calendar,
-  DollarSign,
-  Tag,
   User,
-  Building,
+  FileText,
   ChevronDown,
-  ChevronUp,
-  RefreshCw
+  ChevronUp
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
-import { getTransactions, deleteTransaction } from '../utils/database';
+import { getTransactions, deleteTransaction, getClients, getClientFiles } from '../utils/database';
 import { getBusinessType } from '../utils/businessConfig';
-import type { Transaction } from '../utils/database';
+import type { Transaction, Client, ClientFile } from '../utils/database';
 
 interface TransactionsTableProps {
   onAddTransaction?: () => void;
@@ -54,8 +49,10 @@ export function TransactionsTable({
   
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
-  const [businessType, setBusinessType] = useState<'general' | 'legal'>('general');
+  const [clients, setClients] = useState<Record<string, Client>>({});
+  const [clientFiles, setClientFiles] = useState<Record<string, ClientFile>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingClients, setIsLoadingClients] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   const [filters, setFilters] = useState<FilterState>({
@@ -80,13 +77,32 @@ export function TransactionsTable({
   useEffect(() => {
     loadData();
     
-    // Load business type
-    const loadBusinessType = async () => {
-      const type = await getBusinessType();
-      setCurrentBusinessType(type || 'general');
+    const loadBusinessTypeAndClients = async () => {
+      const type = await getBusinessType() || 'general';
+      setCurrentBusinessType(type);
+      
+      if (type === 'legal') {
+        setIsLoadingClients(true);
+        try {
+          const clientsList = await getClients();
+          const clientsMap = clientsList.reduce((acc, client) => ({ ...acc, [client.id]: client }), {});
+          setClients(clientsMap);
+          
+          const filesMap: Record<string, ClientFile> = {};
+          for (const client of clientsList) {
+            const files = await getClientFiles(client.id);
+            files.forEach(file => { filesMap[file.id] = file; });
+          }
+          setClientFiles(filesMap);
+        } catch (error) {
+          console.error('Failed to load clients and files:', error);
+        } finally {
+          setIsLoadingClients(false);
+        }
+      }
     };
     
-    loadBusinessType();
+    loadBusinessTypeAndClients();
   }, []);
 
   useEffect(() => {
@@ -105,7 +121,7 @@ export function TransactionsTable({
       
       setTransactions(transactionsData);
       if (businessTypeData) {
-        setBusinessType(businessTypeData);
+        setCurrentBusinessType(businessTypeData);
       }
     } catch (err) {
       console.error('Failed to load transactions:', err);
@@ -248,13 +264,10 @@ export function TransactionsTable({
     return Array.from(new Set(transactions.map(t => t.category))).sort();
   };
 
-  if (isLoading) {
+  if (isLoading || (currentBusinessType === 'legal' && isLoadingClients)) {
     return (
-      <div className={`${themeClasses.cardBackground} rounded-lg shadow-sm p-8`}>
-        <div className="flex items-center justify-center">
-          <div className="w-8 h-8 border-2 border-gray-200 border-t-blue-600 rounded-full animate-spin mr-3" />
-          <span className={themeClasses.textSecondary}>Loading transactions...</span>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
       </div>
     );
   }
@@ -274,6 +287,85 @@ export function TransactionsTable({
       </div>
     );
   }
+
+  const columns = [
+    {
+      key: 'date',
+      label: 'Date',
+      render: (transaction: Transaction) => formatDate(transaction.date)
+    },
+    {
+      key: 'description',
+      label: 'Description',
+      render: (transaction: Transaction) => transaction.description
+    },
+    ...(currentBusinessType === 'legal' ? [{
+      key: 'client',
+      label: 'Client',
+      render: (transaction: Transaction) => {
+        if (!transaction.clientId) return '-';
+        const client = clients[transaction.clientId];
+        return client ? (
+          <div className="flex items-center">
+            <User className="w-4 h-4 mr-2 text-gray-500" />
+            <span>{client.name}</span>
+          </div>
+        ) : '-'; 
+      }
+    },
+    {
+      key: 'file',
+      label: 'File',
+      render: (transaction: Transaction) => {
+        if (!transaction.clientFileId) return '-';
+        const file = clientFiles[transaction.clientFileId];
+        return file ? (
+          <div className="flex items-center">
+            <FileText className="w-4 h-4 mr-2 text-gray-500" />
+            <span>{file.fileName}</span>
+          </div>
+        ) : '-'; 
+      }
+    }] : []),
+    {
+      key: 'category',
+      label: 'Category',
+      render: (transaction: Transaction) => transaction.category
+    },
+    {
+      key: 'amount',
+      label: 'Amount',
+      render: (transaction: Transaction) => (
+        <span className={transaction.type === 'income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+          {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
+        </span>
+      )
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      render: (transaction: Transaction) => (
+        <div className="flex items-center justify-center space-x-2">
+          {onEditTransaction && (
+            <button
+              onClick={() => onEditTransaction(transaction)}
+              className={`p-1 ${themeClasses.textSecondary} hover:${themeClasses.text} ${themeClasses.hover} rounded transition-colors`}
+              title="Edit transaction"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+          )}
+          <button
+            onClick={() => handleDeleteTransaction(transaction.id)}
+            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+            title="Delete transaction"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      )
+    }
+  ];
 
   return (
     <div className={className}>
@@ -494,51 +586,18 @@ export function TransactionsTable({
                       className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                     />
                   </th>
-                  <th 
-                    className={`px-4 py-3 text-left text-sm font-medium ${themeClasses.text} cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700`}
-                    onClick={() => handleSort('date')}
-                  >
-                    <div className="flex items-center space-x-1">
-                      <Calendar className="w-4 h-4" />
-                      <span>Date</span>
-                      {sort.field === 'date' && (
+                  {columns.map(column => (
+                    <th 
+                      key={column.key} 
+                      className={`px-4 py-3 text-left text-sm font-medium ${themeClasses.text} cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700`}
+                      onClick={() => handleSort(column.key as keyof Transaction)}
+                    >
+                      {column.label}
+                      {sort.field === column.key && (
                         sort.direction === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
                       )}
-                    </div>
-                  </th>
-                  <th 
-                    className={`px-4 py-3 text-left text-sm font-medium ${themeClasses.text} cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700`}
-                    onClick={() => handleSort('description')}
-                  >
-                    Description
-                  </th>
-                  <th 
-                    className={`px-4 py-3 text-left text-sm font-medium ${themeClasses.text} cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700`}
-                    onClick={() => handleSort('category')}
-                  >
-                    <div className="flex items-center space-x-1">
-                      <Tag className="w-4 h-4" />
-                      <span>Category</span>
-                    </div>
-                  </th>
-                  <th className={`px-4 py-3 text-left text-sm font-medium ${themeClasses.text}`}>
-                    {businessType === 'legal' ? 'Client/Vendor' : 'Customer/Vendor'}
-                  </th>
-                  <th 
-                    className={`px-4 py-3 text-right text-sm font-medium ${themeClasses.text} cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700`}
-                    onClick={() => handleSort('amount')}
-                  >
-                    <div className="flex items-center justify-end space-x-1">
-                      <DollarSign className="w-4 h-4" />
-                      <span>Amount</span>
-                      {sort.field === 'amount' && (
-                        sort.direction === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                      )}
-                    </div>
-                  </th>
-                  <th className={`px-4 py-3 text-center text-sm font-medium ${themeClasses.text}`}>
-                    Actions
-                  </th>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -557,44 +616,12 @@ export function TransactionsTable({
                         className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                       />
                     </td>
-                    <td className={`px-4 py-3 text-sm ${themeClasses.text}`}>
-                      {formatDate(transaction.date)}
-                    </td>
-                    <td className={`px-4 py-3 text-sm ${themeClasses.text}`}>
-                      <div>
-                        <p className="font-medium">{transaction.description}</p>
-                        {transaction.account && (
-                          <p className={`text-xs ${themeClasses.textSecondary}`}>
-                            Account: {transaction.account}
-                          </p>
-                        )}
-                      </div>
-                    </td>
-                    <td className={`px-4 py-3 text-sm ${themeClasses.text}`}>
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
-                        {transaction.category}
-                      </span>
-                    </td>
-                    <td className={`px-4 py-3 text-sm ${themeClasses.textSecondary}`}>
-                      {transaction.customer && (
-                        <div className="flex items-center space-x-1">
-                          <User className="w-3 h-3" />
-                          <span>{transaction.customer}</span>
-                        </div>
-                      )}
-                      {transaction.vendor && (
-                        <div className="flex items-center space-x-1">
-                          <Building className="w-3 h-3" />
-                          <span>{transaction.vendor}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className={`px-4 py-3 text-sm text-right font-medium ${
-                      transaction.type === 'income' ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
-                    </td>
-                    <td className="px-4 py-3 text-center">
+                    {columns.map(column => (
+                      <td key={column.key} className={`px-4 py-3 text-sm ${themeClasses.text}`}>
+                        {column.render(transaction)}
+                      </td>
+                    ))}
+                    <td className="px-4 py-3">
                       <div className="flex items-center justify-center space-x-2">
                         {onEditTransaction && (
                           <button
