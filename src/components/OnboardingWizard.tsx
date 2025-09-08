@@ -5,27 +5,39 @@ import { UzajiLogo } from './UzajiLogo';
 import { completeOnboarding, getDefaultExpenseCategories } from '../utils/businessConfig';
 import type { BusinessConfig, ExpenseCategory } from '../utils/database';
 
+type BusinessType = 'general' | 'legal';
+
 interface OnboardingWizardProps {
-  businessType: 'general' | 'legal';
+  initialBusinessType?: BusinessType;
   onComplete: (config: BusinessConfig) => void;
   onBack: () => void;
   isOpen: boolean;
+  skipBusinessTypeSelection?: boolean;
 }
 
 interface FormData {
+  businessType: BusinessType;
   businessName: string;
   selectedCategories: string[];
 }
 
 interface ValidationErrors {
   businessName?: string;
+  businessType?: string;
 }
 
-export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: OnboardingWizardProps) {
+export function OnboardingWizard({ 
+  initialBusinessType = 'general',
+  onComplete, 
+  onBack, 
+  isOpen, 
+  skipBusinessTypeSelection = false 
+}: OnboardingWizardProps) {
   const { getThemeClasses } = useSettings();
   const themeClasses = getThemeClasses();
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(skipBusinessTypeSelection ? 2 : 1);
   const [formData, setFormData] = useState<FormData>({
+    businessType: initialBusinessType,
     businessName: '',
     selectedCategories: [],
   });
@@ -34,18 +46,18 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const totalSteps = 3;
+  const totalSteps = skipBusinessTypeSelection ? 3 : 4;
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && formData.businessType) {
       loadDefaultCategories();
     }
-  }, [isOpen, businessType]);
+  }, [isOpen, formData.businessType]);
 
   const loadDefaultCategories = async () => {
     try {
       setIsLoading(true);
-      const categories = await getDefaultExpenseCategories(businessType);
+      const categories = await getDefaultExpenseCategories(formData.businessType);
       setAvailableCategories(categories);
       // Pre-select default categories
       setFormData(prev => ({
@@ -62,7 +74,7 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
   const validateStep = (step: number): boolean => {
     const newErrors: ValidationErrors = {};
 
-    if (step === 2) {
+    if (step === 3) { // Business name step is now step 3
       if (!formData.businessName.trim()) {
         newErrors.businessName = 'Business name is required';
       } else if (formData.businessName.trim().length < 2) {
@@ -86,6 +98,10 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
     setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
+  const handleBusinessTypeSelect = (type: BusinessType) => {
+    setFormData(prev => ({ ...prev, businessType: type }));
+  };
+
   const handleCategoryToggle = (categoryId: string) => {
     setFormData(prev => ({
       ...prev,
@@ -100,13 +116,13 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
 
     setIsSubmitting(true);
     try {
-      const result = await completeOnboarding(businessType, formData.businessName.trim());
+      const result = await completeOnboarding(formData.businessType, formData.businessName.trim());
       
       if (result.success && result.configId) {
         // Create a mock config object for the callback
         const mockConfig: BusinessConfig = {
           id: result.configId,
-          type: businessType,
+          type: formData.businessType,
           name: formData.businessName.trim(),
           setupComplete: true,
           onboardingDate: new Date().toISOString(),
@@ -115,7 +131,7 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
           ),
           accounts: [],
           uiPreferences: {
-            dashboardLayout: businessType === 'legal' ? 'legal' : 'standard',
+            dashboardLayout: formData.businessType === 'legal' ? 'legal' : 'standard',
             compactView: false,
             defaultTransactionType: 'income',
             showProFeatures: true,
@@ -143,16 +159,18 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
     general: {
       title: 'General Small Business',
       icon: Building2,
-      color: 'from-blue-600 to-indigo-600'
+      color: 'from-blue-600 to-indigo-600',
+      description: 'Perfect for retail, services, consulting, and most business types.'
     },
     legal: {
       title: 'Legal Firm',
       icon: Scale,
-      color: 'from-purple-600 to-pink-600'
+      color: 'from-purple-600 to-pink-600',
+      description: 'Specialized features for law firms, attorneys, and legal professionals.'
     }
   };
 
-  const typeInfo = businessTypeInfo[businessType];
+  const typeInfo = businessTypeInfo[formData.businessType];
   const Icon = typeInfo.icon;
 
   return (
@@ -178,10 +196,62 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
 
         {/* Content */}
         <div className="p-6">
-          {/* Step 1: Confirmation */}
+          {/* Step 1: Business Type Selection */}
           {currentStep === 1 && (
+            <div>
+              <h2 className={`text-2xl font-bold ${themeClasses.text} mb-2 text-center`}>
+                What type of business are you?
+              </h2>
+              <p className={`${themeClasses.textSecondary} mb-8 text-center`}>
+                Choose your business type to get started with the right features and categories.
+              </p>
+              
+              <div className="space-y-4">
+                {Object.entries(businessTypeInfo).map(([type, info]) => {
+                  const BusinessIcon = info.icon;
+                  const isSelected = formData.businessType === type;
+                  
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => handleBusinessTypeSelect(type as BusinessType)}
+                      className={`w-full p-6 border-2 rounded-xl transition-all duration-200 text-left ${
+                        isSelected 
+                          ? `border-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-lg` 
+                          : `${themeClasses.border} ${themeClasses.hover} hover:shadow-md`
+                      }`}
+                    >
+                      <div className="flex items-start space-x-4">
+                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${info.color} flex items-center justify-center flex-shrink-0 shadow-md`}>
+                          <BusinessIcon className="w-6 h-6 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className={`text-lg font-semibold ${themeClasses.text} mb-1`}>
+                            {info.title}
+                          </h3>
+                          <p className={`${themeClasses.textSecondary} text-sm`}>
+                            {info.description}
+                          </p>
+                        </div>
+                        {isSelected && (
+                          <div className="flex-shrink-0">
+                            <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                              <Check className="w-4 h-4 text-white" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Confirmation */}
+          {currentStep === 2 && (
             <div className="text-center">
-              <div className={`w-20 h-20 mx-auto mb-6 rounded-2xl ${themeClasses.accent} flex items-center justify-center shadow-lg`}>
+              <div className={`w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br ${typeInfo.color} flex items-center justify-center shadow-lg`}>
                 <Icon className="w-10 h-10 text-white" />
               </div>
               <h2 className={`text-2xl font-bold ${themeClasses.text} mb-2`}>
@@ -214,8 +284,8 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
             </div>
           )}
 
-          {/* Step 2: Business Name */}
-          {currentStep === 2 && (
+          {/* Step 3: Business Name */}
+          {currentStep === 3 && (
             <div>
               <h2 className={`text-2xl font-bold ${themeClasses.text} mb-2`}>
                 What's your business name?
@@ -273,14 +343,14 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
             </div>
           )}
 
-          {/* Step 3: Categories */}
-          {currentStep === 3 && (
+          {/* Step 4: Categories */}
+          {currentStep === 4 && (
             <div>
               <h2 className={`text-2xl font-bold ${themeClasses.text} mb-2`}>
                 Choose your expense categories
               </h2>
               <p className={`${themeClasses.textSecondary} mb-6`}>
-                We've pre-selected common categories for {businessType === 'legal' ? 'legal firms' : 'small businesses'}. You can customize these anytime.
+                We've pre-selected common categories for {formData.businessType === 'legal' ? 'legal firms' : 'small businesses'}. You can customize these anytime.
               </p>
 
               {isLoading ? (
@@ -332,7 +402,7 @@ export function OnboardingWizard({ businessType, onComplete, onBack, isOpen }: O
             disabled={isSubmitting}
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            {currentStep === 1 ? 'Change Business Type' : 'Previous'}
+            {currentStep === 1 ? 'Back' : 'Previous'}
           </button>
 
           <div className="flex items-center space-x-3">
