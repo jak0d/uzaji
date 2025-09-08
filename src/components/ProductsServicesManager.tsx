@@ -386,24 +386,26 @@ export function ProductsServicesManager({ className = '' }: ProductsServicesMana
       )}
 
       {/* Tabs */}
-      <div className="flex space-x-1 mb-6">
-        <button
-          onClick={() => setActiveTab('products')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            activeTab === 'products'
-              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-              : `${themeClasses.textSecondary} hover:${themeClasses.text} ${themeClasses.hover}`
-          }`}
-        >
-          Products ({products.length})
-        </button>
+      <div className={`flex ${businessType === 'legal' ? '' : 'space-x-1'} mb-6`}>
+        {businessType !== 'legal' && (
+          <button
+            onClick={() => setActiveTab('products')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'products'
+                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                : `${themeClasses.textSecondary} hover:${themeClasses.text} ${themeClasses.hover}`
+            }`}
+          >
+            Products ({products.length})
+          </button>
+        )}
         <button
           onClick={() => setActiveTab('services')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             activeTab === 'services'
               ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
               : `${themeClasses.textSecondary} hover:${themeClasses.text} ${themeClasses.hover}`
-          }`}
+          } ${businessType === 'legal' ? 'w-full' : ''}`}
         >
           Services ({services.length})
         </button>
