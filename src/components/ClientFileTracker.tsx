@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
-import { deleteClient } from '../utils/database';
+import { deleteClient, getClients, addClient, getClientFiles } from '../utils/database';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Client {
@@ -76,32 +76,15 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
   });
 
   const loadClients = useCallback(async () => {
-    // Check if we already have clients in localStorage
-    const savedClients = localStorage.getItem('uzaji_clients');
-    
-    if (savedClients) {
-      setClients(JSON.parse(savedClients));
-    } else {
-      // Only load mock data if no saved clients exist
-      const mockClients: Client[] = [
-        {
-          id: '1',
-          name: 'John Smith',
-          email: 'john.smith@email.com',
-          phone: '(555) 123-4567',
-          totalOutstandingFees: 5000,
-          totalFundsHeld: 2000,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }
-      ];
-      
-      setClients(mockClients);
-      // Save mock data to localStorage
-      localStorage.setItem('uzaji_clients', JSON.stringify(mockClients));
+    try {
+      const clientsData = await getClients();
+      setClients(clientsData);
+    } catch (error) {
+      console.error('Error loading clients:', error);
+      setClients([]);
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   }, []);
 
   // Load clients from localStorage on component mount
@@ -116,79 +99,46 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
     }
   }, [selectedClient?.id]); // Add selectedClient.id as dependency
 
-  // Save clients to localStorage whenever the clients array changes
-  useEffect(() => {
-    if (clients.length > 0) {
-      localStorage.setItem('uzaji_clients', JSON.stringify(clients));
-    }
-  }, [clients]);
+  // No need to save to localStorage anymore, database handles persistence
 
-  const handleAddClient = () => {
+  const handleAddClient = async () => {
     if (!newClient.name.trim()) return;
     
-    const newClientWithId = {
-      ...newClient,
-      id: uuidv4(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    const updatedClients = [...clients, newClientWithId];
-    setClients(updatedClients);
-    
-    // Reset form
-    setNewClient({ 
-      name: '', 
-      email: '', 
-      phone: '', 
-      address: '', 
-      totalOutstandingFees: 0, 
-      totalFundsHeld: 0 
-    });
-    
-    setIsAddClientModalOpen(false);
-    
-    // Show success message
-    alert('Client added successfully!');
+    try {
+      // Add client to database
+      await addClient({
+        ...newClient,
+        encrypted: false
+      });
+      
+      // Reload clients from database
+      await loadClients();
+      
+      // Reset form
+      setNewClient({
+        name: '',
+        email: '',
+        phone: '',
+        address: '',
+        totalOutstandingFees: 0,
+        totalFundsHeld: 0
+      });
+      
+      setIsAddClientModalOpen(false);
+      
+      // Show success message
+      alert('Client added successfully!');
+    } catch (error) {
+      console.error('Error adding client:', error);
+      alert('Failed to add client. Please try again.');
+    }
   };
 
 
   const loadClientFiles = useCallback(async (clientId: string) => {
     try {
-      // Try to load from localStorage first
-      const savedFiles = localStorage.getItem('uzaji_clientFiles');
-      let files: ClientFile[] = [];
-      
-      if (savedFiles) {
-        files = JSON.parse(savedFiles).filter((file: ClientFile) => file.clientId === clientId);
-      }
-      
-      // If no saved files, use mock data for this client
-      if (files.length === 0) {
-        files = [
-          {
-            id: '1',
-            clientId,
-            fileName: 'Smith vs. ABC Corp - Case #2024-001',
-            dateOpened: '2024-01-15',
-            feesToBePaid: 3000,
-            depositPaid: 1500,
-            balanceRemaining: 1500,
-            totalExpenses: 500,
-            totalExtraFees: 200,
-            totalFeesCharged: 3200,
-            totalPaid: 1500,
-            netSummary: 2200,
-            status: 'active',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          }
-        ];
-        // Save mock data to localStorage
-        localStorage.setItem('uzaji_clientFiles', JSON.stringify(files));
-      }
-      
-      setClientFiles(files);
+      const filesData = await getClientFiles(clientId);
+      setClientFiles(filesData);
     } catch (error) {
       console.error('Error loading client files:', error);
       setClientFiles([]);
@@ -209,11 +159,6 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
       // Delete client from database
       await deleteClient(clientId);
       
-      // Also delete all files associated with this client
-      const clientFiles = JSON.parse(localStorage.getItem('uzaji_clientFiles') || '[]');
-      const remainingFiles = clientFiles.filter((file: any) => file.clientId !== clientId);
-      localStorage.setItem('uzaji_clientFiles', JSON.stringify(remainingFiles));
-      
       // Update the clients list
       const updatedClients = clients.filter(client => client.id !== clientId);
       setClients(updatedClients);
@@ -223,9 +168,6 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
         setSelectedClient(null);
         setClientFiles([]);
       }
-      
-      // Update local storage
-      localStorage.setItem('uzaji_clients', JSON.stringify(updatedClients));
       
       console.log('Client deleted successfully');
     } catch (error) {
