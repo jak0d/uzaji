@@ -93,15 +93,15 @@ export function DashboardHeader({ user, onLogout, onMenuToggle, isMobileMenuOpen
 
   return (
     <>
-      <header className={`${themeClasses.cardBackground} shadow-sm ${themeClasses.border} border-b sticky top-0 z-40`}>
+      <header className={`${themeClasses.cardBackground} shadow-sm ${themeClasses.border} border-b sticky top-0 z-40 backdrop-blur-sm bg-opacity-95`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Left Section */}
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3 min-w-0 flex-1">
               {/* Mobile Menu Button */}
               <button
                 onClick={onMenuToggle}
-                className={`lg:hidden p-2 ${themeClasses.textSecondary} hover:${themeClasses.text} ${themeClasses.hover} rounded-lg transition-colors`}
+                className={`lg:hidden p-2 ${themeClasses.textSecondary} hover:${themeClasses.text} ${themeClasses.hover} rounded-lg transition-colors flex-shrink-0`}
                 aria-label="Toggle menu"
               >
                 {isMobileMenuOpen ? (
@@ -111,68 +111,100 @@ export function DashboardHeader({ user, onLogout, onMenuToggle, isMobileMenuOpen
                 )}
               </button>
 
-              {/* Logo */}
-              <UzajiLogo size="md" className="hidden sm:block" />
-              <UzajiLogo size="sm" className="sm:hidden" />
+              {/* Logo Container with improved responsive display */}
+              <div className="flex-shrink-0">
+                {/* Desktop/Tablet Logo */}
+                <div className="hidden sm:block">
+                  <UzajiLogo size="md" />
+                </div>
+                {/* Mobile Logo */}
+                <div className="sm:hidden">
+                  <UzajiLogo size="sm" />
+                </div>
+              </div>
 
-              {/* Welcome Message */}
-              <div className="hidden md:block">
-                <h1 className={`text-xl font-bold ${themeClasses.text}`}>
+              {/* Welcome Message - Improved spacing and truncation */}
+              <div className="hidden lg:block min-w-0 flex-1 ml-6">
+                <h1 className={`text-xl font-bold ${themeClasses.text} truncate`}>
                   Welcome back{businessName ? `, ${businessName}` : ''}! 👋
                 </h1>
-                <p className={`text-sm ${themeClasses.textSecondary}`}>
+                <p className={`text-sm ${themeClasses.textSecondary} truncate`}>
                   {formatCurrentDate()}
+                </p>
+              </div>
+
+              {/* Medium screen welcome - shorter version */}
+              <div className="hidden md:block lg:hidden min-w-0 flex-1 ml-4">
+                <h1 className={`text-lg font-semibold ${themeClasses.text} truncate`}>
+                  Welcome back! 👋
+                </h1>
+                <p className={`text-xs ${themeClasses.textSecondary} truncate`}>
+                  {currentDate.toLocaleDateString()}
                 </p>
               </div>
             </div>
 
             {/* Right Section */}
-            <div className="flex items-center space-x-3">
-              {/* Online Status */}
-              <div className="hidden sm:flex items-center space-x-2">
+            <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
+              {/* Online Status - Improved responsive display */}
+              <div className="hidden md:flex items-center space-x-2 px-2 py-1 rounded-lg bg-opacity-50">
                 {isOnline ? (
                   <Wifi className="w-4 h-4 text-green-500" />
                 ) : (
                   <WifiOff className="w-4 h-4 text-red-500" />
                 )}
-                <span className={`text-sm ${themeClasses.textSecondary}`}>
+                <span className={`text-xs font-medium ${isOnline ? 'text-green-600' : 'text-red-600'}`}>
                   {isOnline ? 'Online' : 'Offline'}
                 </span>
               </div>
 
-              {/* Settings Button */}
-              <button
-                onClick={handleSettingsClick}
-                className={`p-2 ${themeClasses.textSecondary} hover:${themeClasses.text} ${themeClasses.hover} rounded-lg transition-colors`}
-                aria-label="Settings"
-              >
-                <Settings className="w-5 h-5" />
-              </button>
+              {/* Mobile status indicator - icon only */}
+              <div className="md:hidden">
+                {isOnline ? (
+                  <Wifi className="w-4 h-4 text-green-500" />
+                ) : (
+                  <WifiOff className="w-4 h-4 text-red-500" />
+                )}
+              </div>
 
-              {/* Notifications Button (Future Feature) */}
-              <button
-                className={`p-2 ${themeClasses.textSecondary} hover:${themeClasses.text} ${themeClasses.hover} rounded-lg transition-colors opacity-50 cursor-not-allowed`}
-                aria-label="Notifications (Coming Soon)"
-                disabled
-              >
-                <Bell className="w-5 h-5" />
-              </button>
+              {/* Action Buttons */}
+              <div className="flex items-center space-x-1">
+                {/* Settings Button */}
+                <button
+                  onClick={handleSettingsClick}
+                  className={`p-2 ${themeClasses.textSecondary} hover:${themeClasses.text} ${themeClasses.hover} rounded-lg transition-colors`}
+                  aria-label="Settings"
+                >
+                  <Settings className="w-5 h-5" />
+                </button>
+
+                {/* Notifications Button (Future Feature) */}
+                <button
+                  className={`p-2 ${themeClasses.textSecondary} hover:${themeClasses.text} ${themeClasses.hover} rounded-lg transition-colors opacity-50 cursor-not-allowed`}
+                  aria-label="Notifications (Coming Soon)"
+                  disabled
+                >
+                  <Bell className="w-5 h-5" />
+                </button>
+              </div>
 
               {/* User Menu */}
               <div className="relative">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
-                  className={`flex items-center space-x-2 p-2 ${themeClasses.text} ${themeClasses.hover} rounded-lg transition-colors`}
+                  className={`flex items-center space-x-2 p-2 ${themeClasses.text} ${themeClasses.hover} rounded-lg transition-colors min-w-0`}
                   aria-label="User menu"
                 >
-                  <div className={`w-8 h-8 ${themeClasses.accent} rounded-full flex items-center justify-center shadow-sm`}>
+                  <div className={`w-8 h-8 ${themeClasses.accent} rounded-full flex items-center justify-center shadow-sm flex-shrink-0`}>
                     <span className={`${themeClasses.accentText} text-sm font-medium`}>
                       {getUserInitials(user.name)}
                     </span>
                   </div>
-                  <span className="hidden sm:block text-sm font-medium truncate max-w-32">
-                    {user.name}
-                  </span>
+                  <div className="hidden sm:block min-w-0">
+                    <span className="text-sm font-medium truncate max-w-24 xl:max-w-32 block">
+                      {user.name}
+                    </span>
+                  </div>
                 </button>
 
                 {/* User Dropdown Menu */}
@@ -181,7 +213,7 @@ export function DashboardHeader({ user, onLogout, onMenuToggle, isMobileMenuOpen
                     {/* User Info */}
                     <div className={`px-4 py-3 border-b ${themeClasses.border}`}>
                       <div className="flex items-center space-x-3">
-                        <div className={`w-10 h-10 ${themeClasses.accent} rounded-full flex items-center justify-center`}>
+                        <div className={`w-10 h-10 ${themeClasses.accent} rounded-full flex items-center justify-center flex-shrink-0`}>
                           <span className={`${themeClasses.accentText} font-medium`}>
                             {getUserInitials(user.name)}
                           </span>
@@ -228,24 +260,31 @@ export function DashboardHeader({ user, onLogout, onMenuToggle, isMobileMenuOpen
             </div>
           </div>
 
-          {/* Mobile Welcome Message */}
-          <div className="md:hidden pb-4">
-            <h1 className={`text-lg font-bold ${themeClasses.text}`}>
-              Welcome back{businessName ? `, ${businessName}` : ''}! 👋
-            </h1>
-            <div className="flex items-center justify-between mt-1">
-              <p className={`text-sm ${themeClasses.textSecondary}`}>
-                {formatCurrentDate()}
-              </p>
-              <div className="flex items-center space-x-2">
+          {/* Mobile Welcome Message - Improved layout */}
+          <div className="md:hidden pb-3 pt-1 border-t border-opacity-30">
+            <div className="flex items-start justify-between">
+              <div className="min-w-0 flex-1">
+                <h1 className={`text-base font-bold ${themeClasses.text} truncate`}>
+                  Welcome back{businessName && businessName.length <= 15 ? `, ${businessName}` : ''}! 👋
+                </h1>
+                <p className={`text-xs ${themeClasses.textSecondary} truncate mt-0.5`}>
+                  {formatCurrentDate()}
+                </p>
+              </div>
+              
+              {/* Mobile status with better styling */}
+              <div className="flex items-center space-x-1 ml-2 px-2 py-1 rounded-md bg-opacity-50">
                 {isOnline ? (
-                  <Wifi className="w-4 h-4 text-green-500" />
+                  <>
+                    <Wifi className="w-3 h-3 text-green-500" />
+                    <span className="text-xs font-medium text-green-600">Online</span>
+                  </>
                 ) : (
-                  <WifiOff className="w-4 h-4 text-red-500" />
+                  <>
+                    <WifiOff className="w-3 h-3 text-red-500" />
+                    <span className="text-xs font-medium text-red-600">Offline</span>
+                  </>
                 )}
-                <span className={`text-sm ${themeClasses.textSecondary}`}>
-                  {isOnline ? 'Online' : 'Offline'}
-                </span>
               </div>
             </div>
           </div>
