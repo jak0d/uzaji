@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Package, User, FileText } from 'lucide-react';
+import { ArrowLeft, Save, Package, User, FileText, AlertCircle } from 'lucide-react';
+import { getDB } from '../utils/database';
 import { useNavigate } from 'react-router-dom';
 import { addTransaction, getClients, getClientFiles, getBusinessConfig, getAccounts, getProducts, getServices } from '../utils/database';
 import type { Client, ClientFile, Product, Service, Account } from '../utils/database';
@@ -34,6 +35,8 @@ export function TransactionForm({}: TransactionFormProps) {
   const [clientFiles, setClientFiles] = useState<ClientFile[]>([]);
   const [isLegalFirm, setIsLegalFirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   const categories = {
@@ -42,9 +45,24 @@ export function TransactionForm({}: TransactionFormProps) {
   };
 
   useEffect(() => {
-    loadInitialData();
-    // Track page view
-    trackFeature('transactions', 'form_view');
+    const initialize = async () => {
+      try {
+        setIsInitializing(true);
+        setError(null);
+        // Ensure database is initialized
+        await getDB();
+        await loadInitialData();
+        // Track page view
+        trackFeature('transactions', 'form_view');
+      } catch (err) {
+        console.error('Failed to initialize transaction form:', err);
+        setError('Failed to load transaction form. Please try refreshing the page.');
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+
+    initialize();
   }, []);
 
   const loadInitialData = async () => {
@@ -92,6 +110,14 @@ export function TransactionForm({}: TransactionFormProps) {
       }
     } catch (error) {
       console.error('Failed to load initial data for transaction form:', error);
+      setError('Failed to load form data. You can still create transactions with basic information.');
+      // Set default values to allow form to function
+      setIsLegalFirm(false);
+      setAccounts([{ id: 'default', name: 'Default Account', currentBalance: 0, accountType: 'checking' as const, accountNumber: '****0000', bankName: 'Default Bank', isDefault: true, isActive: true, encrypted: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }]);
+      setFormData(prev => ({
+        ...prev,
+        account: 'default',
+      }));
     }
   };
 
@@ -204,6 +230,39 @@ export function TransactionForm({}: TransactionFormProps) {
     );
   }
 
+  if (isInitializing) {
+    return (
+      <div className={`min-h-screen ${themeClasses.background} flex items-center justify-center`}>
+        <div className={`${themeClasses.cardBackground} rounded-2xl shadow-xl p-8 text-center max-w-md mx-4`}>
+          <div className="flex items-center space-x-2 text-blue-600 dark:text-blue-400 mb-4">
+            <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <span className={themeClasses.text}>Loading transaction form...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={`min-h-screen ${themeClasses.background} flex items-center justify-center`}>
+        <div className={`${themeClasses.cardBackground} rounded-2xl shadow-xl p-8 text-center max-w-md mx-4`}>
+          <div className="w-16 h-16 bg-gradient-to-br from-red-500 to-rose-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+            <AlertCircle className="w-8 h-8 text-white" />
+          </div>
+          <h2 className={`text-2xl font-bold ${themeClasses.text} mb-2`}>Error Loading Form</h2>
+          <p className={themeClasses.textSecondary}>{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen ${themeClasses.background}`}>
       <header className={`${themeClasses.cardBackground} shadow-sm ${themeClasses.border} border-b`}>
@@ -223,6 +282,16 @@ export function TransactionForm({}: TransactionFormProps) {
 
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className={`${themeClasses.cardBackground} rounded-lg shadow-sm ${themeClasses.border} border p-6`}>
+          {/* Error display */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mr-2" />
+                <span className={`text-sm ${themeClasses.textSecondary}`}>{error}</span>
+              </div>
+            </div>
+          )}
+
           {/* Quick Select from Products/Services */}
           {(products.length > 0 || services.length > 0) && (
             <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
@@ -348,7 +417,7 @@ export function TransactionForm({}: TransactionFormProps) {
               >
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
-                    {account.name} ({formatCurrency(account.balance)})
+                    {account.name} ({formatCurrency(account.currentBalance || 0)})
                   </option>
                 ))}
               </select>
