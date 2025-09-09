@@ -1007,12 +1007,12 @@ export function BankingModule() {
                 <select
                   value={transferForm.fromAccountId}
                   onChange={(e) => setTransferForm(prev => ({ ...prev, fromAccountId: e.target.value }))}
-                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${themeClasses.cardBackground}`}
+                  className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${themeClasses.cardBackground} ${themeClasses.text} text-left max-w-full overflow-hidden`}
                 >
                   <option value="">Select account</option>
                   {accounts.map(account => (
-                    <option key={account.id} value={account.id}>
-                      {account.name} ({formatCurrency(account.currentBalance)})
+                    <option key={account.id} value={account.id} className="py-2">
+                      {account.name} - {formatCurrency(account.currentBalance)}
                     </option>
                   ))}
                 </select>
@@ -1025,12 +1025,12 @@ export function BankingModule() {
                 <select
                   value={transferForm.toAccountId}
                   onChange={(e) => setTransferForm(prev => ({ ...prev, toAccountId: e.target.value }))}
-                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${themeClasses.cardBackground}`}
+                  className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${themeClasses.cardBackground} ${themeClasses.text} text-left max-w-full overflow-hidden`}
                 >
                   <option value="">Select account</option>
                   {accounts.filter(account => account.id !== transferForm.fromAccountId).map(account => (
-                    <option key={account.id} value={account.id}>
-                      {account.name} ({formatCurrency(account.currentBalance)})
+                    <option key={account.id} value={account.id} className="py-2">
+                      {account.name} - {formatCurrency(account.currentBalance)}
                     </option>
                   ))}
                 </select>
@@ -1265,12 +1265,12 @@ export function BankingModule() {
                 <select
                   value={transferForm.fromAccountId}
                   onChange={(e) => setTransferForm(prev => ({ ...prev, fromAccountId: e.target.value }))}
-                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${themeClasses.cardBackground}`}
+                  className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${themeClasses.cardBackground} ${themeClasses.text} text-left max-w-full overflow-hidden`}
                 >
                   <option value="">Select account</option>
                   {accounts.map(account => (
-                    <option key={account.id} value={account.id}>
-                      {account.name} ({formatCurrency(account.currentBalance)})
+                    <option key={account.id} value={account.id} className="py-2">
+                      {account.name} - {formatCurrency(account.currentBalance)}
                     </option>
                   ))}
                 </select>
@@ -1283,12 +1283,12 @@ export function BankingModule() {
                 <select
                   value={transferForm.toAccountId}
                   onChange={(e) => setTransferForm(prev => ({ ...prev, toAccountId: e.target.value }))}
-                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${themeClasses.cardBackground}`}
+                  className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${themeClasses.cardBackground} ${themeClasses.text} text-left max-w-full overflow-hidden`}
                 >
                   <option value="">Select account</option>
                   {accounts.filter(account => account.id !== transferForm.fromAccountId).map(account => (
-                    <option key={account.id} value={account.id}>
-                      {account.name} ({formatCurrency(account.currentBalance)})
+                    <option key={account.id} value={account.id} className="py-2">
+                      {account.name} - {formatCurrency(account.currentBalance)}
                     </option>
                   ))}
                 </select>

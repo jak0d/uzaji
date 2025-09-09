@@ -82,8 +82,8 @@ export function TransactionForm({}: TransactionFormProps) {
       const isLegal = businessConfig?.type === 'legal';
       setIsLegalFirm(isLegal);
       
-      // Load clients if this is a legal firm
-      if (isLegal) {
+      // Always load clients for optional linking
+      try {
         const clientsData = await getClients();
         setClients(clientsData);
         
@@ -99,6 +99,9 @@ export function TransactionForm({}: TransactionFormProps) {
             clientFileId: files.length > 0 ? files[0].id : ''
           }));
         }
+      } catch (error) {
+        console.error('Failed to load clients:', error);
+        setError('Could not load client list. You can still add transactions without client association.');
       }
 
       if (accountsData.length > 0) {
@@ -143,7 +146,8 @@ export function TransactionForm({}: TransactionFormProps) {
       }));
     } catch (error) {
       console.error('Failed to load client files:', error);
-      // Handle error appropriately
+      setError('Could not load client files. You can still proceed without selecting a file.');
+      setClientFiles([]);
     }
   };
 
@@ -163,8 +167,8 @@ export function TransactionForm({}: TransactionFormProps) {
         encrypted: true,
       };
       
-      // Add client and file references for legal firms
-      if (isLegalFirm && formData.clientId) {
+      // Add client and file references if provided (optional for all business types)
+      if (formData.clientId) {
         transactionData.clientId = formData.clientId;
         if (formData.clientFileId) {
           transactionData.clientFileId = formData.clientFileId;
@@ -423,51 +427,109 @@ export function TransactionForm({}: TransactionFormProps) {
               </select>
             </div>
 
-            {/* Client Selection (Legal Firm Only) */}
-            {isLegalFirm && (
-              <>
-                <div>
-                  <label htmlFor="client" className={`block text-sm font-medium ${themeClasses.text} mb-2 flex items-center`}>
-                    <User className="w-4 h-4 mr-2" />
-                    {t('clients.client') || 'Client'}
-                  </label>
+            {/* Client Selection (Optional for all business types) */}
+            <div>
+              <label htmlFor="client" className={`block text-sm font-medium ${themeClasses.text} mb-2 flex items-center`}>
+                <User className="w-4 h-4 mr-2" />
+                {t('') || 'Client (Optional)'}
+              </label>
+              
+              {clients.length === 0 ? (
+                <div className={`p-4 ${themeClasses.cardBackground} border ${themeClasses.border} rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800`}>
+                  <div className="flex items-start space-x-3">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+                    </div>
+                    <div className="flex-1">
+                      <p className={`text-sm ${themeClasses.text}`}>
+                        {t('') || 'No clients available'}
+                      </p>
+                      <p className={`text-sm ${themeClasses.textSecondary} mt-1`}>
+                        {t('') || 'You can still create transactions without linking to a client, or add your first client to start tracking client-specific transactions.'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/clients')}
+                        className="mt-3 inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-100 dark:bg-blue-900/20 rounded-md hover:bg-blue-200 dark:hover:bg-blue-800/30 transition-colors"
+                      >
+                        {t('') || 'Add First Client'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
                   <select
                     id="client"
                     value={formData.clientId}
                     onChange={(e) => handleClientChange(e.target.value)}
                     className={`w-full px-4 py-3 ${themeClasses.border} border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${themeClasses.cardBackground} ${themeClasses.text}`}
                   >
-                    <option value="">{t('clients.selectClient') || 'Select a client'}</option>
+                    <option value="">{t('') || 'No Client / Select a client'}</option>
                     {clients.map((client) => (
                       <option key={client.id} value={client.id}>
                         {client.name}
                       </option>
                     ))}
                   </select>
-                </div>
+                  <p className={`text-xs ${themeClasses.textSecondary} mt-1`}>
+                    {t('') || 'Client linking is optional. Leave unselected for general transactions.'}
+                  </p>
 
-                {formData.clientId && clientFiles.length > 0 && (
-                  <div>
-                    <label htmlFor="clientFile" className={`block text-sm font-medium ${themeClasses.text} mb-2 flex items-center`}>
-                      <FileText className="w-4 h-4 mr-2" />
-                      {t('clients.clientFile') || 'Client File'}
-                    </label>
-                    <select
-                      id="clientFile"
-                      value={formData.clientFileId}
-                      onChange={(e) => setFormData(prev => ({ ...prev, clientFileId: e.target.value }))}
-                      className={`w-full px-4 py-3 ${themeClasses.border} border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${themeClasses.cardBackground} ${themeClasses.text}`}
-                    >
-                      <option value="">{t('clients.selectFile') || 'Select a file'}</option>
-                      {clientFiles.map((file) => (
-                        <option key={file.id} value={file.id}>
-                          {file.fileName} - {file.status}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </>
+                  {/* Enhanced Client Display Preview */}
+                  {formData.clientId && (
+                    <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <label className={`block text-sm font-semibold ${themeClasses.text} mb-1 flex items-center`}>
+                        <User className="w-4 h-4 mr-2 text-blue-600 dark:text-blue-400" />
+                        {t('') || 'Selected Client'}
+                      </label>
+                      {(() => {
+                        const selectedClient = clients.find(c => c.id === formData.clientId);
+                        const displayName = selectedClient?.name || t('clients.unknownClient') || 'Unknown Client';
+                        const truncatedName = displayName.length > 30 ? `${displayName.substring(0, 30)}...` : displayName;
+                        return (
+                          <div
+                            className={`inline-flex items-center px-3 py-2 bg-white dark:bg-gray-800 rounded-md shadow-sm border ${themeClasses.border} text-sm font-bold ${themeClasses.text} max-w-full overflow-hidden`}
+                            title={displayName}
+                            style={{
+                              whiteSpace: 'nowrap',
+                              textOverflow: 'ellipsis',
+                              wordBreak: 'keep-all'
+                            }}
+                          >
+                            {truncatedName}
+                          </div>
+                        );
+                      })()}
+                      <p className={`text-xs ${themeClasses.textSecondary} mt-1`}>
+                        {t('') || 'This client will be linked to the transaction for tracking purposes.'}
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {formData.clientId && clientFiles.length > 0 && (
+              <div>
+                <label htmlFor="clientFile" className={`block text-sm font-medium ${themeClasses.text} mb-2 flex items-center`}>
+                  <FileText className="w-4 h-4 mr-2" />
+                  {t('clients.clientFile') || 'Client File'}
+                </label>
+                <select
+                  id="clientFile"
+                  value={formData.clientFileId}
+                  onChange={(e) => setFormData(prev => ({ ...prev, clientFileId: e.target.value }))}
+                  className={`w-full px-4 py-3 ${themeClasses.border} border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${themeClasses.cardBackground} ${themeClasses.text}`}
+                >
+                  <option value="">{t('clients.selectFile') || 'Select a file'}</option>
+                  {clientFiles.map((file) => (
+                    <option key={file.id} value={file.id}>
+                      {file.fileName} - {file.status}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
 
             <div>

@@ -343,7 +343,7 @@ export async function initDB(): Promise<void> {
         const accountStore = db.createObjectStore('accounts', {
           keyPath: 'id',
         });
-        accountStore.createIndex('by-type', 'type');
+        accountStore.createIndex('by-accountType', 'accountType');
         accountStore.createIndex('by-default', 'isDefault');
 
         // Expense Categories store
@@ -409,7 +409,7 @@ export async function initDB(): Promise<void> {
         const accountStore = transaction.objectStore('accounts');
         if (accountStore) {
           // Drop old indexes if they exist and recreate with new names
-          if (accountStore.indexNames.contains('by-type')) {
+          if (accountStore.indexNames.contains('by-accountType')) {
             accountStore.deleteIndex('by-type');
           }
           accountStore.createIndex('by-accountType', 'accountType');
@@ -803,12 +803,12 @@ export async function getAccounts(): Promise<Account[]> {
 
 export async function getActiveAccounts(): Promise<Account[]> {
   const database = await getDB();
-  return await database.getAllFromIndex('accounts', 'by-active', true);
+  return await database.getAllFromIndex('accounts', 'by-active', IDBKeyRange.only(true));
 }
 
 export async function getDefaultAccount(): Promise<Account | null> {
   const database = await getDB();
-  const accounts = await database.getAllFromIndex('accounts', 'by-default', true);
+  const accounts = await database.getAllFromIndex('accounts', 'by-default', IDBKeyRange.only(true));
   return accounts.length > 0 ? accounts[0] : null;
 }
 
@@ -986,7 +986,7 @@ export async function needsOnboarding(): Promise<boolean> {
 // Utility function to complete onboarding
 export async function completeOnboarding(businessType: 'general' | 'legal', businessName: string): Promise<string> {
   const db = await getDB();
-  const tx = db.transaction(['businessConfig', 'accounts', 'expenseCategories'], 'readwrite');
+  const tx = db.transaction(['businessConfig', 'accounts', 'expenseCategories', 'clients', 'clientFiles'], 'readwrite');
   
   // Create or update business config with all required fields
   const config: BusinessConfig = {
@@ -1021,9 +1021,12 @@ export async function completeOnboarding(businessType: 'general' | 'legal', busi
     await tx.objectStore('accounts').add({
       id: `account-${Date.now()}`,
       name: 'Cash',
-      type: 'cash',
-      balance: 0,
+      accountType: 'cash',
+      accountNumber: 'CASH-001',
+      bankName: 'Cash Account',
+      currentBalance: 0,
       isDefault: true,
+      isActive: true,
       encrypted: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -1057,6 +1060,80 @@ export async function completeOnboarding(businessType: 'general' | 'legal', busi
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+    }
+  }
+
+  // Create sample clients and files for legal firms only
+  if (businessType === 'legal') {
+    const existingClients = await tx.objectStore('clients').getAll();
+    if (existingClients.length === 0) {
+      const now = new Date().toISOString();
+      const sampleClients: Omit<Client, 'id' | 'createdAt' | 'updatedAt'>[] = [
+        {
+          name: 'John Smith',
+          email: 'john.smith@example.com',
+          phone: '+1-555-0123',
+          address: '123 Main St, City, State 12345',
+          totalOutstandingFees: 2500.00,
+          totalFundsHeld: 1500.00,
+          encrypted: false,
+        },
+        {
+          name: 'Jane Doe Legal',
+          email: 'jane.doe@example.com',
+          phone: '+1-555-0456',
+          address: '456 Oak Ave, Town, State 67890',
+          totalOutstandingFees: 1800.00,
+          totalFundsHeld: 800.00,
+          encrypted: false,
+        },
+        {
+          name: 'Acme Corp',
+          email: 'contact@acmecorp.com',
+          phone: '+1-555-0789',
+          address: '789 Business Blvd, Metro, State 13579',
+          totalOutstandingFees: 4500.00,
+          totalFundsHeld: 3000.00,
+          encrypted: false,
+        }
+      ];
+
+      for (const clientData of sampleClients) {
+        const client: Client = {
+          ...clientData,
+          id: crypto.randomUUID(),
+          createdAt: now,
+          updatedAt: now,
+        };
+        await tx.objectStore('clients').add(client);
+
+        // Create a sample client file for each client
+        const sampleFile: Omit<ClientFile, 'id' | 'createdAt' | 'updatedAt'> = {
+          clientId: client.id,
+          fileName: `${client.name} - Matter File`,
+          dateOpened: now.split('T')[0],
+          feesToBePaid: client.totalOutstandingFees,
+          depositPaid: client.totalFundsHeld * 0.5,
+          balanceRemaining: client.totalOutstandingFees - (client.totalFundsHeld * 0.5),
+          totalExpenses: 0,
+          totalExtraFees: 0,
+          totalFeesCharged: client.totalOutstandingFees,
+          totalPaid: client.totalFundsHeld * 0.5,
+          netSummary: (client.totalFundsHeld * 0.5) - client.totalOutstandingFees,
+          status: 'active' as const,
+          encrypted: false,
+        };
+
+        const file: ClientFile = {
+          ...sampleFile,
+          id: crypto.randomUUID(),
+          createdAt: now,
+          updatedAt: now,
+        };
+        await tx.objectStore('clientFiles').add(file);
+      }
+
+      console.log(`Created ${sampleClients.length} sample clients with files for legal firm onboarding`);
     }
   }
   
