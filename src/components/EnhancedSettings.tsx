@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  Building, 
-  Tag, 
-  Plus, 
-  Edit, 
-  Trash2, 
+import {
+  ArrowLeft,
+  Building,
+  Tag,
+  Plus,
+  Edit,
+  Trash2,
   Save,
   AlertCircle,
   Check,
@@ -18,21 +18,31 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
-import { 
-  getCurrentBusinessConfig, 
+import { useTranslation } from '../hooks/useTranslation';
+import { useAuth } from '../hooks/useAuth';
+import {
+  getCurrentBusinessConfig,
   updateCurrentBusinessConfig,
-  getBusinessType 
+  getBusinessType
 } from '../utils/businessConfig';
-import { 
-  getExpenseCategories, 
-  addExpenseCategory, 
-  updateExpenseCategory, 
-  deleteExpenseCategory 
+import {
+  getExpenseCategories,
+  addExpenseCategory,
+  updateExpenseCategory,
+  deleteExpenseCategory,
+  getTransactions,
+  getProducts,
+  getServices,
+  setSetting,
+  addTransaction,
+  addProduct,
+  addService
 } from '../utils/database';
 import type { BusinessConfig, ExpenseCategory } from '../utils/database';
+import type { User } from '../hooks/useAuth';
 
 interface EnhancedSettingsProps {
-  user?: any;
+  user: User | null;
   onLogout?: () => void;
   onBack?: () => void;
   className?: string;
@@ -56,6 +66,7 @@ interface FormErrors {
 export function EnhancedSettings({ user, onLogout, onBack, className = '' }: EnhancedSettingsProps) {
   const { settings, getThemeClasses, updateSettings } = useSettings();
   const themeClasses = getThemeClasses();
+  const { user: authUser } = useAuth();
   
   const [businessConfig, setBusinessConfig] = useState<BusinessConfig | null>(null);
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
@@ -86,6 +97,13 @@ export function EnhancedSettings({ user, onLogout, onBack, className = '' }: Enh
   const [showRestartDialog, setShowRestartDialog] = useState(false);
   const [restartConfirmation, setRestartConfirmation] = useState('');
   const [isRestarting, setIsRestarting] = useState(false);
+
+  // Data export/import states
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [exportSuccess, setExportSuccess] = useState(false);
+  const [importSuccess, setImportSuccess] = useState(false);
+  const { t } = useTranslation(settings.language);
 
   useEffect(() => {
     loadData();
@@ -243,14 +261,147 @@ export function EnhancedSettings({ user, onLogout, onBack, className = '' }: Enh
     setCategoryErrors({});
   };
 
-  const exportData = () => {
-    // This would export user data - placeholder for now
-    console.log('Export data functionality would be implemented here');
+  const exportData = async () => {
+    if (!authUser) {
+      setError('User not authenticated. Please log in again.');
+      return;
+    }
+    
+    setIsExporting(true);
+    setError(null);
+    try {
+      const [transactions, products, services] = await Promise.all([
+        getTransactions(),
+        getProducts(),
+        getServices(),
+      ]);
+
+      const exportData = {
+        version: '1.0',
+        exportDate: new Date().toISOString(),
+        user: {
+          id: authUser.id,
+          email: authUser.email,
+          name: authUser.name
+        },
+        data: {
+          transactions,
+          products,
+          services,
+          settings
+        }
+      };
+
+      // Create and download file
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `uzaji-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setExportSuccess(true);
+      setTimeout(() => setExportSuccess(false), 3000);
+    } catch (error) {
+      console.error('Export failed:', error);
+      setError('Failed to export data. Please try again or check your browser console for details.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
-  const importData = () => {
-    // This would import user data - placeholder for now
-    console.log('Import data functionality would be implemented here');
+  const importData = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const importData = JSON.parse(text);
+
+      if (!importData.version || !importData.data) {
+        throw new Error('Invalid backup file format');
+      }
+
+      // Store import info for dashboard
+      const importInfo = {
+        date: new Date().toISOString(),
+        originalExportDate: importData.exportDate,
+        stats: {
+          transactions: importData.data.transactions?.length || 0,
+          products: importData.data.products?.length || 0,
+          services: importData.data.services?.length || 0,
+          duplicatesSkipped: 0,
+          errors: 0
+        }
+      };
+
+      await setSetting('last-import', importInfo);
+
+      // Import transactions with "(Imported)" suffix
+      if (importData.data.transactions) {
+        for (const transaction of importData.data.transactions) {
+          try {
+            const { addTransaction } = await import('../utils/database');
+            await addTransaction({
+              ...transaction,
+              description: `${transaction.description} (Imported)`,
+              encrypted: true
+            });
+          } catch (error) {
+            importInfo.stats.errors++;
+            console.error('Failed to import transaction:', error);
+          }
+        }
+      }
+
+      // Import products
+      if (importData.data.products) {
+        for (const product of importData.data.products) {
+          try {
+            const { addProduct } = await import('../utils/database');
+            await addProduct({
+              ...product,
+              encrypted: true
+            });
+          } catch (error) {
+            importInfo.stats.errors++;
+            console.error('Failed to import product:', error);
+          }
+        }
+      }
+
+      // Import services
+      if (importData.data.services) {
+        for (const service of importData.data.services) {
+          try {
+            const { addService } = await import('../utils/database');
+            await addService({
+              ...service,
+              encrypted: true
+            });
+          } catch (error) {
+            importInfo.stats.errors++;
+            console.error('Failed to import service:', error);
+          }
+        }
+      }
+
+      // Update import info with final stats
+      await setSetting('last-import', importInfo);
+
+      setImportSuccess(true);
+      setTimeout(() => setImportSuccess(false), 3000);
+    } catch (error) {
+      console.error('Import failed:', error);
+    } finally {
+      setIsImporting(false);
+      // Reset file input
+      event.target.value = '';
+    }
   };
 
   const handleRestartOnboarding = async () => {
@@ -680,33 +831,40 @@ export function EnhancedSettings({ user, onLogout, onBack, className = '' }: Enh
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <button
                   onClick={exportData}
-                  className={`p-4 border rounded-lg ${themeClasses.border} ${themeClasses.hover} transition-colors text-left`}
+                  disabled={isExporting}
+                  className={`p-4 border rounded-lg ${themeClasses.border} ${themeClasses.hover} transition-colors text-left flex items-center justify-center ${
+                    isExporting ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : 'bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50'
+                  }`}
                 >
                   <div className="flex items-center space-x-3">
                     <Download className="w-5 h-5 text-blue-600" />
                     <div>
                       <h3 className={`font-medium ${themeClasses.text}`}>Export Data</h3>
                       <p className={`text-sm ${themeClasses.textSecondary}`}>
-                        Download your data as a backup file
+                        {isExporting ? 'Exporting...' : 'Download your data as a backup file'}
                       </p>
                     </div>
                   </div>
                 </button>
 
-                <button
-                  onClick={importData}
-                  className={`p-4 border rounded-lg ${themeClasses.border} ${themeClasses.hover} transition-colors text-left`}
-                >
+                <label className={`p-4 border rounded-lg ${themeClasses.border} ${themeClasses.hover} transition-colors text-left cursor-pointer ${isImporting ? 'opacity-50 cursor-not-allowed' : ''}`}>
                   <div className="flex items-center space-x-3">
                     <Upload className="w-5 h-5 text-green-600" />
                     <div>
                       <h3 className={`font-medium ${themeClasses.text}`}>Import Data</h3>
                       <p className={`text-sm ${themeClasses.textSecondary}`}>
-                        Restore data from a backup file
+                        {isImporting ? 'Importing...' : 'Restore data from a backup file'}
                       </p>
                     </div>
                   </div>
-                </button>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={importData}
+                    className="hidden"
+                    disabled={isImporting}
+                  />
+                </label>
               </div>
 
               <div className="border-t pt-6 space-y-4">
@@ -716,7 +874,7 @@ export function EnhancedSettings({ user, onLogout, onBack, className = '' }: Enh
                     onClick={onLogout}
                     className="w-full md:w-auto px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-left flex items-center justify-center space-x-2"
                   >
-                    <span>Sign Out</span>
+                    <span>{t('auth.signOut')}</span>
                   </button>
                   
                   <button
@@ -724,10 +882,22 @@ export function EnhancedSettings({ user, onLogout, onBack, className = '' }: Enh
                     className="w-full md:w-auto px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-left flex items-center justify-center space-x-2"
                   >
                     <RotateCcw className="w-4 h-4" />
-                    <span>Restart Onboarding</span>
+                    <span>{t('settings.restartOnboarding')}</span>
                   </button>
                 </div>
               </div>
+              
+              {exportSuccess && (
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg mt-4">
+                  <p className="text-green-800 dark:text-green-200 font-medium">✓ {t('settings.dataExportedSuccess')}</p>
+                </div>
+              )}
+              
+              {importSuccess && (
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg mt-4">
+                  <p className="text-green-800 dark:text-green-200 font-medium">✓ {t('settings.dataImportedSuccess')}</p>
+                </div>
+              )}
             </div>
           </div>
         )}
