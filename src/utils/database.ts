@@ -86,9 +86,12 @@ export interface ExpenseCategory {
 export interface Account {
   id: string;
   name: string;
-  type: 'cash' | 'bank' | 'credit';
-  balance: number;
+  accountType: 'checking' | 'savings' | 'credit' | 'cash' | 'investment';
+  accountNumber: string;
+  bankName: string;
+  currentBalance: number;
   isDefault: boolean;
+  isActive: boolean;
   encrypted: boolean;
   createdAt: string;
   updatedAt: string;
@@ -198,9 +201,9 @@ interface BookkeepingDB extends DBSchema {
   transactions: {
     key: string;
     value: Transaction;
-    indexes: { 
-      'by-date': string; 
-      'by-type': string; 
+    indexes: {
+      'by-date': string;
+      'by-type': string;
       'by-category': string;
       'by-account': string;
       'by-customer': string;
@@ -229,7 +232,12 @@ interface BookkeepingDB extends DBSchema {
   accounts: {
     key: string;
     value: Account;
-    indexes: { 'by-type': string; 'by-default': string };
+    indexes: { 'by-accountType': string; 'by-default': string; 'by-active': string };
+  };
+  transfers: {
+    key: string;
+    value: Transfer;
+    indexes: { 'by-date': string; 'by-status': string; 'by-fromAccount': string; 'by-toAccount': string };
   };
   expenseCategories: {
     key: string;
@@ -268,10 +276,22 @@ interface BookkeepingDB extends DBSchema {
   };
 }
 
+export interface Transfer {
+  id: string;
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  description: string;
+  date: string;
+  status: 'completed' | 'pending' | 'failed';
+  createdAt: string;
+  updatedAt: string;
+}
+
 let db: IDBPDatabase<BookkeepingDB>;
 
 export async function initDB(): Promise<void> {
-  db = await openDB<BookkeepingDB>('bookkeeping-db', 4, {
+  db = await openDB<BookkeepingDB>('bookkeeping-db', 5, {
     async upgrade(db, oldVersion, _newVersion, transaction) {
       // Handle migration from version 1 to 2
       if (oldVersion < 1) {
@@ -383,6 +403,31 @@ export async function initDB(): Promise<void> {
         invoiceStore.createIndex('by-status', 'status');
         invoiceStore.createIndex('by-date', 'invoiceDate');
       }
+
+      if (oldVersion < 5) {
+        // Version 5: Enhanced accounts and add transfers store
+        const accountStore = transaction.objectStore('accounts');
+        if (accountStore) {
+          // Drop old indexes if they exist and recreate with new names
+          if (accountStore.indexNames.contains('by-type')) {
+            accountStore.deleteIndex('by-type');
+          }
+          accountStore.createIndex('by-accountType', 'accountType');
+          accountStore.createIndex('by-active', 'isActive');
+        }
+
+        // Create transfers store
+        const transferStore = db.createObjectStore('transfers', {
+          keyPath: 'id',
+        });
+        transferStore.createIndex('by-date', 'date');
+        transferStore.createIndex('by-status', 'status');
+        transferStore.createIndex('by-fromAccount', 'fromAccountId');
+        transferStore.createIndex('by-toAccount', 'toAccountId');
+
+        // Migrate existing accounts to new schema
+        await migrateAccountsToEnhancedSchema(transaction);
+      }
     },
   });
 }
@@ -413,19 +458,50 @@ async function initializeDefaultData(transaction: any): Promise<void> {
     await categoryStore.add(categoryWithId);
   }
 
-  // Create default account
+  // Create default accounts with enhanced schema
   const accountStore = transaction.objectStore('accounts');
-  const defaultAccount: Account = {
-    id: crypto.randomUUID(),
-    name: 'Main Account',
-    type: 'bank',
-    balance: 0,
-    isDefault: true,
-    encrypted: false,
-    createdAt: now,
-    updatedAt: now,
-  };
-  await accountStore.add(defaultAccount);
+  const defaultAccounts: Omit<Account, 'id' | 'createdAt' | 'updatedAt'>[] = [
+    {
+      name: 'Business Checking',
+      accountType: 'checking',
+      accountNumber: '****1234',
+      bankName: 'First National Bank',
+      currentBalance: 15000,
+      isDefault: true,
+      isActive: true,
+      encrypted: false,
+    },
+    {
+      name: 'Business Savings',
+      accountType: 'savings',
+      accountNumber: '****5678',
+      bankName: 'First National Bank',
+      currentBalance: 25000,
+      isDefault: false,
+      isActive: true,
+      encrypted: false,
+    },
+    {
+      name: 'Petty Cash',
+      accountType: 'cash',
+      accountNumber: 'CASH-001',
+      bankName: 'Cash Account',
+      currentBalance: 500,
+      isDefault: false,
+      isActive: true,
+      encrypted: false,
+    }
+  ];
+
+  for (const acc of defaultAccounts) {
+    const accountWithId: Account = {
+      ...acc,
+      id: crypto.randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+    };
+    await accountStore.add(accountWithId);
+  }
 }
 
 // Migrate existing transactions to support new schema
@@ -454,6 +530,55 @@ async function migrateExistingTransactions(transaction: any): Promise<void> {
     
     // Update the transaction with new fields
     await transactionStore.put(updatedTransaction);
+  }
+}
+
+async function migrateAccountsToEnhancedSchema(transaction: any): Promise<void> {
+  const accountStore = transaction.objectStore('accounts');
+  const allAccounts = await accountStore.getAll();
+  
+  for (const account of allAccounts) {
+    // Map old type to new accountType and add missing fields
+    let accountType: Account['accountType'];
+    let bankName = 'Unknown Bank';
+    let accountNumber = '****0000';
+    let isActive = true;
+    
+    switch ((account as any).type) {
+      case 'cash':
+        accountType = 'cash';
+        bankName = 'Cash Account';
+        accountNumber = 'CASH-001';
+        break;
+      case 'credit':
+        accountType = 'credit';
+        bankName = 'Credit Provider';
+        accountNumber = '****9999';
+        break;
+      case 'bank':
+      default:
+        accountType = 'checking';
+        bankName = 'Default Bank';
+        accountNumber = '****1234';
+        break;
+    }
+    
+    const updatedAccount: Account = {
+      ...account,
+      accountType,
+      accountNumber,
+      bankName,
+      currentBalance: (account as any).balance || 0,
+      isActive,
+      encrypted: (account as any).encrypted || false,
+      updatedAt: new Date().toISOString(),
+    };
+    
+    // Remove old type field if present
+    delete (updatedAccount as any).type;
+    delete (updatedAccount as any).balance;
+    
+    await accountStore.put(updatedAccount);
   }
 }
 
@@ -676,9 +801,14 @@ export async function getAccounts(): Promise<Account[]> {
   return await database.getAll('accounts');
 }
 
+export async function getActiveAccounts(): Promise<Account[]> {
+  const database = await getDB();
+  return await database.getAllFromIndex('accounts', 'by-active', true);
+}
+
 export async function getDefaultAccount(): Promise<Account | null> {
   const database = await getDB();
-  const accounts = await database.getAllFromIndex('accounts', 'by-default', 'true');
+  const accounts = await database.getAllFromIndex('accounts', 'by-default', true);
   return accounts.length > 0 ? accounts[0] : null;
 }
 
@@ -698,6 +828,52 @@ export async function updateAccount(id: string, updates: Partial<Account>): Prom
 export async function deleteAccount(id: string): Promise<void> {
   const database = await getDB();
   await database.delete('accounts', id);
+}
+
+// Transfer operations
+export async function addTransfer(transfer: Omit<Transfer, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  const database = await getDB();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  
+  const newTransfer: Transfer = {
+    ...transfer,
+    id,
+    createdAt: now,
+    updatedAt: now,
+  };
+  
+  await database.add('transfers', newTransfer);
+  return id;
+}
+
+export async function getTransfers(): Promise<Transfer[]> {
+  const database = await getDB();
+  return await database.getAll('transfers');
+}
+
+export async function getTransfersByDateRange(startDate: string, endDate: string): Promise<Transfer[]> {
+  const database = await getDB();
+  const allTransfers = await database.getAll('transfers');
+  return allTransfers.filter(t => t.date >= startDate && t.date <= endDate);
+}
+
+export async function updateTransfer(id: string, updates: Partial<Transfer>): Promise<void> {
+  const database = await getDB();
+  const transfer = await database.get('transfers', id);
+  if (transfer) {
+    const updatedTransfer = {
+      ...transfer,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    await database.put('transfers', updatedTransfer);
+  }
+}
+
+export async function deleteTransfer(id: string): Promise<void> {
+  const database = await getDB();
+  await database.delete('transfers', id);
 }
 
 // Expense Category operations

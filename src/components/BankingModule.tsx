@@ -16,31 +16,8 @@ import {
   TrendingDown
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
-import { addTransaction } from '../utils/database';
+import { addTransaction, getAccounts, getTransfers, addAccount, updateAccount, addTransfer, Account, Transfer } from '../utils/database';
 
-interface BankAccount {
-  id: string;
-  name: string;
-  accountType: 'checking' | 'savings' | 'credit' | 'cash' | 'investment';
-  accountNumber: string;
-  bankName: string;
-  currentBalance: number;
-  isDefault: boolean;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface Transfer {
-  id: string;
-  fromAccountId: string;
-  toAccountId: string;
-  amount: number;
-  description: string;
-  date: string;
-  status: 'completed' | 'pending' | 'failed';
-  createdAt: string;
-}
 
 interface BankingModuleProps {
   className?: string;
@@ -50,13 +27,13 @@ export function BankingModule({ className = '' }: BankingModuleProps) {
   const { formatCurrency, formatDate, getThemeClasses } = useSettings();
   const themeClasses = getThemeClasses();
 
-  const [accounts, setAccounts] = useState<BankAccount[]>([]);
-  const [transfers, setTransfers] = useState<Transfer[]>([]);
-  const [showAccountForm, setShowAccountForm] = useState(false);
-  const [showTransferForm, setShowTransferForm] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<BankAccount | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedView, setSelectedView] = useState<'accounts' | 'transfers'>('accounts');
+  const [accounts, setAccounts] = useState<Account[]>([]);
+    const [transfers, setTransfers] = useState<Transfer[]>([]);
+    const [showAccountForm, setShowAccountForm] = useState(false);
+    const [showTransferForm, setShowTransferForm] = useState(false);
+    const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [selectedView, setSelectedView] = useState<'accounts' | 'transfers'>('accounts');
 
   // Transfer form state
   const [transferForm, setTransferForm] = useState({
@@ -69,157 +46,133 @@ export function BankingModule({ className = '' }: BankingModuleProps) {
 
   // Account form state
   const [accountForm, setAccountForm] = useState({
-    name: '',
-    accountType: 'checking' as BankAccount['accountType'],
-    accountNumber: '',
-    bankName: '',
-    currentBalance: '',
-    isDefault: false
-  });
+      name: '',
+      accountType: 'checking' as Account['accountType'],
+      accountNumber: '',
+      bankName: '',
+      currentBalance: '',
+      isDefault: false
+    });
 
   useEffect(() => {
     loadBankingData();
   }, []);
 
   const loadBankingData = async () => {
-    // Mock data for demonstration
-    const mockAccounts: BankAccount[] = [
-      {
-        id: '1',
-        name: 'Business Checking',
-        accountType: 'checking',
-        accountNumber: '****1234',
-        bankName: 'First National Bank',
-        currentBalance: 15000,
-        isDefault: true,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        id: '2',
-        name: 'Business Savings',
-        accountType: 'savings',
-        accountNumber: '****5678',
-        bankName: 'First National Bank',
-        currentBalance: 25000,
-        isDefault: false,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        id: '3',
-        name: 'Petty Cash',
-        accountType: 'cash',
-        accountNumber: 'CASH-001',
-        bankName: 'Cash Account',
-        currentBalance: 500,
-        isDefault: false,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-    ];
-
-    const mockTransfers: Transfer[] = [
-      {
-        id: '1',
-        fromAccountId: '1',
-        toAccountId: '2',
-        amount: 5000,
-        description: 'Monthly savings transfer',
-        date: '2024-01-15',
-        status: 'completed',
-        createdAt: new Date().toISOString()
-      }
-    ];
-
-    setAccounts(mockAccounts);
-    setTransfers(mockTransfers);
-    setIsLoading(false);
+    try {
+      setIsLoading(true);
+      const realAccounts = await getAccounts();
+      const realTransfers = await getTransfers();
+      
+      // Filter active accounts
+      const activeAccounts = realAccounts.filter(a => a.isActive);
+      
+      setAccounts(activeAccounts);
+      setTransfers(realTransfers);
+    } catch (error) {
+      console.error('Failed to load banking data:', error);
+      // Fallback to empty arrays
+      setAccounts([]);
+      setTransfers([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleAddAccount = async () => {
     if (!accountForm.name || !accountForm.bankName) return;
-
-    const newAccount: BankAccount = {
-      id: Date.now().toString(),
-      name: accountForm.name,
-      accountType: accountForm.accountType,
-      accountNumber: accountForm.accountNumber,
-      bankName: accountForm.bankName,
-      currentBalance: parseFloat(accountForm.currentBalance) || 0,
-      isDefault: accountForm.isDefault,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    setAccounts(prev => [...prev, newAccount]);
-    setShowAccountForm(false);
-    resetAccountForm();
+  
+    try {
+      const newAccountData = {
+        name: accountForm.name,
+        accountType: accountForm.accountType,
+        accountNumber: accountForm.accountNumber,
+        bankName: accountForm.bankName,
+        currentBalance: parseFloat(accountForm.currentBalance) || 0,
+        isDefault: accountForm.isDefault,
+        isActive: true,
+        encrypted: false,
+      };
+  
+      await addAccount(newAccountData);
+      
+      // Reload data
+      await loadBankingData();
+      setShowAccountForm(false);
+      resetAccountForm();
+    } catch (error) {
+      console.error('Failed to add account:', error);
+      // Handle error (e.g., show toast notification)
+    }
   };
 
   const handleTransfer = async () => {
     if (!transferForm.fromAccountId || !transferForm.toAccountId || !transferForm.amount) return;
-
+  
     const amount = parseFloat(transferForm.amount);
     const fromAccount = accounts.find(a => a.id === transferForm.fromAccountId);
     const toAccount = accounts.find(a => a.id === transferForm.toAccountId);
-
+  
     if (!fromAccount || !toAccount || fromAccount.currentBalance < amount) return;
-
-    // Create transfer record
-    const newTransfer: Transfer = {
-      id: Date.now().toString(),
-      fromAccountId: transferForm.fromAccountId,
-      toAccountId: transferForm.toAccountId,
-      amount,
-      description: transferForm.description || 'Account transfer',
-      date: transferForm.date,
-      status: 'completed',
-      createdAt: new Date().toISOString()
-    };
-
-    // Update account balances
-    setAccounts(prev => prev.map(account => {
-      if (account.id === transferForm.fromAccountId) {
-        return { ...account, currentBalance: account.currentBalance - amount };
-      } else if (account.id === transferForm.toAccountId) {
-        return { ...account, currentBalance: account.currentBalance + amount };
-      }
-      return account;
-    }));
-
-    // Add to transfers
-    setTransfers(prev => [...prev, newTransfer]);
-
-    // Create corresponding transactions in the main ledger
-    await addTransaction({
-      type: 'expense',
-      amount,
-      description: `Transfer to ${toAccount.name}: ${transferForm.description}`,
-      category: 'Transfer',
-      date: transferForm.date,
-      account: transferForm.fromAccountId,
-      attachments: [],
-      tags: ['transfer']
-    });
-
-    await addTransaction({
-      type: 'income',
-      amount,
-      description: `Transfer from ${fromAccount.name}: ${transferForm.description}`,
-      category: 'Transfer',
-      date: transferForm.date,
-      account: transferForm.toAccountId,
-      attachments: [],
-      tags: ['transfer']
-    });
-
-    setShowTransferForm(false);
-    resetTransferForm();
+  
+    try {
+      // Create transfer record
+      const newTransferData = {
+        fromAccountId: transferForm.fromAccountId,
+        toAccountId: transferForm.toAccountId,
+        amount,
+        description: transferForm.description || 'Account transfer',
+        date: transferForm.date,
+        status: 'completed' as const,
+      };
+  
+      await addTransfer(newTransferData);
+  
+      // Update account balances
+      await updateAccount(transferForm.fromAccountId, {
+        currentBalance: fromAccount.currentBalance - amount,
+        updatedAt: new Date().toISOString()
+      });
+  
+      await updateAccount(transferForm.toAccountId, {
+        currentBalance: toAccount.currentBalance + amount,
+        updatedAt: new Date().toISOString()
+      });
+  
+      // Create corresponding transactions in the main ledger
+      await addTransaction({
+        type: 'expense',
+        amount,
+        description: `Transfer to ${toAccount.name}: ${transferForm.description}`,
+        category: 'Transfer',
+        date: transferForm.date,
+        account: transferForm.fromAccountId,
+        attachments: [],
+        tags: ['transfer'],
+        encrypted: false
+      });
+  
+      await addTransaction({
+        type: 'income',
+        amount,
+        description: `Transfer from ${fromAccount.name}: ${transferForm.description}`,
+        category: 'Transfer',
+        date: transferForm.date,
+        account: transferForm.toAccountId,
+        attachments: [],
+        tags: ['transfer'],
+        encrypted: false
+      });
+  
+      // Reload data
+      await loadBankingData();
+      
+      setShowTransferForm(false);
+      resetTransferForm();
+    } catch (error) {
+      console.error('Failed to process transfer:', error);
+      // Handle error (e.g., show toast notification)
+    }
   };
 
   const resetAccountForm = () => {
@@ -244,7 +197,7 @@ export function BankingModule({ className = '' }: BankingModuleProps) {
     });
   };
 
-  const getAccountTypeIcon = (type: BankAccount['accountType']) => {
+  const getAccountTypeIcon = (type: Account['accountType']) => {
     switch (type) {
       case 'checking': return Building;
       case 'savings': return TrendingUp;
@@ -255,7 +208,7 @@ export function BankingModule({ className = '' }: BankingModuleProps) {
     }
   };
 
-  const getAccountTypeColor = (type: BankAccount['accountType']) => {
+  const getAccountTypeColor = (type: Account['accountType']) => {
     switch (type) {
       case 'checking': return 'text-blue-600 bg-blue-100';
       case 'savings': return 'text-green-600 bg-green-100';
@@ -480,7 +433,21 @@ export function BankingModule({ className = '' }: BankingModuleProps) {
                             <button className={`p-1 ${themeClasses.textSecondary} hover:${themeClasses.text} rounded transition-colors`}>
                               <Eye className="w-4 h-4" />
                             </button>
-                            <button className={`p-1 ${themeClasses.textSecondary} hover:${themeClasses.text} rounded transition-colors`}>
+                            <button
+                              onClick={() => {
+                                setEditingAccount(account);
+                                setAccountForm({
+                                  name: account.name,
+                                  accountType: account.accountType,
+                                  accountNumber: account.accountNumber,
+                                  bankName: account.bankName,
+                                  currentBalance: account.currentBalance.toString(),
+                                  isDefault: account.isDefault
+                                });
+                                setShowAccountForm(true);
+                              }}
+                              className={`p-1 ${themeClasses.textSecondary} hover:${themeClasses.text} rounded transition-colors`}
+                            >
                               <Edit className="w-4 h-4" />
                             </button>
                           </div>
@@ -618,7 +585,7 @@ export function BankingModule({ className = '' }: BankingModuleProps) {
                 </label>
                 <select
                   value={accountForm.accountType}
-                  onChange={(e) => setAccountForm(prev => ({ ...prev, accountType: e.target.value as BankAccount['accountType'] }))}
+                  onChange={(e) => setAccountForm(prev => ({ ...prev, accountType: e.target.value as Account['accountType'] }))}
                   className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${themeClasses.cardBackground}`}
                 >
                   <option value="checking">Checking</option>
