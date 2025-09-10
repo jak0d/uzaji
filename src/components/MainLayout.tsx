@@ -6,6 +6,7 @@ import { BusinessTypeSelector } from './BusinessTypeSelector';
 import { OnboardingWizard } from './OnboardingWizard';
 import { useSettings } from '../hooks/useSettings';
 import { needsOnboarding, completeOnboarding } from '../utils/businessConfig';
+import { BusinessProvider } from '../contexts/BusinessContext';
 import type { User } from '../hooks/useAuth';
 import type { BusinessConfig } from '../utils/database';
 
@@ -104,37 +105,39 @@ export function MainLayout({ user, onLogout }: MainLayoutProps) {
 
       <OnboardingWizard
         isOpen={showOnboarding}
-        businessType={selectedBusinessType!}
+        initialBusinessType={selectedBusinessType!}
         onComplete={handleOnboardingComplete}
         onBack={handleOnboardingBack}
       />
 
       {/* Main Layout */}
       {!showBusinessTypeSelector && !showOnboarding && (
-        <div className="flex h-screen">
-          {/* Sidebar */}
-          <Sidebar
-            isOpen={isSidebarOpen}
-            onToggle={handleSidebarToggle}
-            onNavigate={handleNavigate}
-          />
-
-          {/* Main Content */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Header */}
-            <DashboardHeader
-              user={user}
-              onLogout={onLogout}
-              onMenuToggle={handleSidebarToggle}
-              isMobileMenuOpen={isSidebarOpen}
+        <BusinessProvider>
+          <div className="flex h-screen">
+            {/* Sidebar */}
+            <Sidebar
+              isOpen={isSidebarOpen}
+              onToggle={handleSidebarToggle}
+              onNavigate={handleNavigate}
             />
 
-            {/* Page Content */}
-            <main className="flex-1 overflow-y-auto">
-              <Outlet />
-            </main>
+            {/* Main Content */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Header */}
+              <DashboardHeader
+                user={user}
+                onLogout={onLogout}
+                onMenuToggle={handleSidebarToggle}
+                isMobileMenuOpen={isSidebarOpen}
+              />
+
+              {/* Page Content */}
+              <main className="flex-1 overflow-y-auto">
+                <Outlet />
+              </main>
+            </div>
           </div>
-        </div>
+        </BusinessProvider>
       )}
     </div>
   );

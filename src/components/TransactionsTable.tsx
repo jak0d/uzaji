@@ -621,26 +621,6 @@ export function TransactionsTable({
                         {column.render(transaction)}
                       </td>
                     ))}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center space-x-2">
-                        {onEditTransaction && (
-                          <button
-                            onClick={() => onEditTransaction(transaction)}
-                            className={`p-1 ${themeClasses.textSecondary} hover:${themeClasses.text} ${themeClasses.hover} rounded transition-colors`}
-                            title="Edit transaction"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDeleteTransaction(transaction.id)}
-                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                          title="Delete transaction"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
                   </tr>
                 ))}
               </tbody>

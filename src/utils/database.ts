@@ -139,6 +139,34 @@ export interface Invoice {
   updatedAt: string;
 }
 
+export interface BillItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  category: string;
+}
+
+export interface Bill {
+  id: string;
+  billNumber: string;
+  vendorId?: string;
+  vendorName: string;
+  vendorEmail?: string;
+  billDate: string;
+  dueDate: string;
+  status: 'draft' | 'pending' | 'paid' | 'overdue' | 'cancelled';
+  subtotal: number;
+  taxAmount: number;
+  totalAmount: number;
+  items: BillItem[];
+  notes?: string;
+  attachments?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Legal Firm Client Management Models
 export interface Client {
   id: string;
@@ -274,6 +302,11 @@ interface BookkeepingDB extends DBSchema {
     value: Invoice;
     indexes: { 'by-customer': string; 'by-status': string; 'by-date': string };
   };
+  bills: {
+    key: string;
+    value: Bill;
+    indexes: { 'by-vendor': string; 'by-status': string; 'by-date': string };
+  };
 }
 
 export interface Transfer {
@@ -402,6 +435,15 @@ export async function initDB(): Promise<void> {
         invoiceStore.createIndex('by-customer', 'customerName');
         invoiceStore.createIndex('by-status', 'status');
         invoiceStore.createIndex('by-date', 'invoiceDate');
+      }
+
+      if (oldVersion < 6) {
+        const billStore = db.createObjectStore('bills', {
+          keyPath: 'id',
+        });
+        billStore.createIndex('by-vendor', 'vendorName');
+        billStore.createIndex('by-status', 'status');
+        billStore.createIndex('by-date', 'billDate');
       }
 
       if (oldVersion < 5) {
@@ -655,22 +697,7 @@ export async function addProduct(product: Omit<Product, 'id' | 'createdAt' | 'up
 export async function getProducts(): Promise<Product[]> {
   const database = await getDB();
   const products = await database.getAll('products');
-  const services = await database.getAll('services');
-
-  const productItems = products.map(p => ({ ...p, type: 'product' as const }));
-  const serviceItems = services.map(s => ({
-    id: s.id,
-    name: s.name,
-    description: s.description,
-    price: s.hourlyRate,
-    category: s.category,
-    encrypted: s.encrypted,
-    createdAt: s.createdAt,
-    updatedAt: s.updatedAt,
-    type: 'service' as const
-  }));
-
-  return [...productItems, ...serviceItems];
+  return products.map(p => ({ ...p, type: 'product' as const }));
 }
 
 export async function updateProduct(id: string, updates: Partial<Product>): Promise<void> {
@@ -1316,6 +1343,46 @@ export async function addInvoice(invoice: Omit<Invoice, 'id' | 'createdAt' | 'up
 
   await database.add('invoices', newInvoice);
   return id;
+}
+
+// Bill operations
+export async function addBill(bill: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  const database = await getDB();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  const newBill: Bill = {
+    ...bill,
+    id,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await database.add('bills', newBill);
+  return id;
+}
+
+export async function getBills(): Promise<Bill[]> {
+  const database = await getDB();
+  return await database.getAll('bills');
+}
+
+export async function updateBill(id: string, updates: Partial<Bill>): Promise<void> {
+  const database = await getDB();
+  const bill = await database.get('bills', id);
+  if (bill) {
+    const updatedBill = {
+      ...bill,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    await database.put('bills', updatedBill);
+  }
+}
+
+export async function deleteBill(id: string): Promise<void> {
+  const database = await getDB();
+  await database.delete('bills', id);
 }
 
 export async function getInvoices(): Promise<Invoice[]> {

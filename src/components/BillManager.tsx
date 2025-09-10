@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Eye, 
-  DollarSign, 
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Eye,
+  DollarSign,
   Search,
   Filter,
   Calendar,
@@ -15,12 +15,13 @@ import {
   AlertCircle,
   XCircle
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
+import { useBusiness } from '../contexts/BusinessContext';
 import { BillForm } from './BillForm';
+import { getBills, addBill, updateBill } from '../utils/database';
 
 interface Bill {
-  id: string;
+  id?: string;
   billNumber: string;
   vendorId?: string;
   vendorName: string;
@@ -34,8 +35,8 @@ interface Bill {
   items: BillItem[];
   notes?: string;
   attachments?: string[];
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface BillItem {
@@ -54,7 +55,7 @@ interface BillManagerProps {
 export function BillManager({ className = '' }: BillManagerProps) {
   const { formatCurrency, formatDate, getThemeClasses } = useSettings();
   const themeClasses = getThemeClasses();
-  const navigate = useNavigate();
+  const { businessType } = useBusiness();
   
   const [bills, setBills] = useState<Bill[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,52 +64,44 @@ export function BillManager({ className = '' }: BillManagerProps) {
   const [showBillForm, setShowBillForm] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
 
+  // Only render for General Business
+  if (businessType !== 'general') {
+    return null;
+  }
+
   useEffect(() => {
     loadBills();
   }, []);
 
   const loadBills = async () => {
-    // Mock data for demonstration
-    const mockBills: Bill[] = [
-      {
-        id: '1',
-        billNumber: 'BILL-2024-001',
-        vendorName: 'Office Supply Co.',
-        vendorEmail: 'billing@officesupply.com',
-        billDate: '2024-01-10',
-        dueDate: '2024-02-09',
-        status: 'pending',
-        subtotal: 500,
-        taxAmount: 50,
-        totalAmount: 550,
-        items: [
-          {
-            id: '1',
-            description: 'Office Supplies',
-            quantity: 1,
-            unitPrice: 500,
-            totalPrice: 500,
-            category: 'Office Supplies'
-          }
-        ],
-        notes: 'Monthly office supplies order',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-    ];
-    
-    setBills(mockBills);
-    setIsLoading(false);
+    try {
+      setIsLoading(true);
+      const loadedBills = await getBills();
+      setBills(loadedBills);
+    } catch (error) {
+      console.error('Failed to load bills:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSaveBill = (billData: Bill) => {
+    // Fire and forget async operations
     if (editingBill) {
-      setBills(prev => prev.map(bill => 
-        bill.id === editingBill.id ? { ...billData, id: editingBill.id } : bill
-      ));
+      updateBill(editingBill.id!, billData).then(() => {
+        setBills(prev => prev.map(bill =>
+          bill.id === editingBill.id ? { ...billData, id: editingBill.id } : bill
+        ));
+      }).catch(error => {
+        console.error('Failed to update bill:', error);
+      });
     } else {
-      const newBill = { ...billData, id: Date.now().toString() };
-      setBills(prev => [...prev, newBill]);
+      addBill(billData).then(newBillId => {
+        const savedBill = { ...billData, id: newBillId };
+        setBills(prev => [...prev, savedBill]);
+      }).catch(error => {
+        console.error('Failed to add bill:', error);
+      });
     }
     setEditingBill(null);
   };
@@ -118,10 +111,15 @@ export function BillManager({ className = '' }: BillManagerProps) {
     setShowBillForm(true);
   };
 
-  const handleMarkAsPaid = (billId: string) => {
-    setBills(prev => prev.map(bill => 
-      bill.id === billId ? { ...bill, status: 'paid' as const, updatedAt: new Date().toISOString() } : bill
-    ));
+  const handleMarkAsPaid = async (billId: string) => {
+    try {
+      await updateBill(billId, { status: 'paid' as const });
+      setBills(prev => prev.map(bill =>
+        bill.id === billId ? { ...bill, status: 'paid' as const, updatedAt: new Date().toISOString() } : bill
+      ));
+    } catch (error) {
+      console.error('Failed to mark bill as paid:', error);
+    }
   };
 
   const getStatusIcon = (status: Bill['status']) => {
@@ -323,7 +321,7 @@ export function BillManager({ className = '' }: BillManagerProps) {
                         </button>
                         {bill.status === 'pending' && (
                           <button 
-                            onClick={() => handleMarkAsPaid(bill.id)}
+                            onClick={() => handleMarkAsPaid(bill.id!)}
                             className={`p-1 text-green-600 hover:text-green-700 rounded transition-colors`}
                             title="Mark as Paid"
                           >

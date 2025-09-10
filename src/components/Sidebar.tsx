@@ -17,7 +17,7 @@ import {
 import { useLocation } from 'react-router-dom';
 import { UzajiLogo } from './UzajiLogo';
 import { useSettings } from '../hooks/useSettings';
-import { getBusinessType } from '../utils/businessConfig';
+import { useBusiness } from '../contexts/BusinessContext';
 
 type BusinessType = 'general' | 'legal';
 
@@ -43,23 +43,18 @@ export function Sidebar({ isOpen, onToggle, onNavigate, className = '' }: Sideba
   const { getThemeClasses } = useSettings();
   const themeClasses = getThemeClasses();
   const location = useLocation();
-  const [businessType, setBusinessType] = useState<'general' | 'legal'>('general');
+  const { businessType, loading } = useBusiness();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  useEffect(() => {
-    loadBusinessType();
-  }, []);
-
-  const loadBusinessType = async () => {
-    try {
-      const type = await getBusinessType();
-      if (type) {
-        setBusinessType(type);
-      }
-    } catch (error) {
-      console.error('Failed to load business type:', error);
-    }
-  };
+  if (loading || !businessType) {
+    return (
+      <div className={`fixed left-0 top-0 h-full z-50 w-64 ${themeClasses.cardBackground} ${themeClasses.border} border-r shadow-lg ${className}`}>
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        </div>
+      </div>
+    );
+  }
 
   // Initialize with common navigation items
   const navigationItems: NavigationItem[] = [

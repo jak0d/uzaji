@@ -23,6 +23,7 @@ export function TransactionForm({}: TransactionFormProps) {
     type: 'income' as 'income' | 'expense',
     category: '',
     productId: '',
+    selectedServiceId: '', // New field for selected service
     account: '',
     clientId: '',
     clientFileId: '',
@@ -34,6 +35,7 @@ export function TransactionForm({}: TransactionFormProps) {
   const [clients, setClients] = useState<Client[]>([]);
   const [clientFiles, setClientFiles] = useState<ClientFile[]>([]);
   const [isLegalFirm, setIsLegalFirm] = useState(false);
+  const [businessType, setBusinessType] = useState<'legal' | 'general_small_business' | 'general'>('general_small_business');
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,9 +80,11 @@ export function TransactionForm({}: TransactionFormProps) {
       setServices(servicesData);
       setAccounts(accountsData);
       
-      // Check if business type is legal firm
-      const isLegal = businessConfig?.type === 'legal';
-      setIsLegalFirm(isLegal);
+      // Check business type
+      const configType = businessConfig?.type || 'general_small_business';
+      console.log('Business config type:', configType, 'Full businessConfig:', businessConfig);
+      setIsLegalFirm(configType === 'legal');
+      setBusinessType(configType as 'legal' | 'general_small_business' | 'general');
       
       // Always load clients for optional linking
       try {
@@ -161,7 +165,7 @@ export function TransactionForm({}: TransactionFormProps) {
         amount: parseFloat(formData.amount),
         type: formData.type,
         category: formData.category,
-        productId: formData.productId || undefined,
+        productId: formData.productId || formData.selectedServiceId || undefined, // Include service ID if selected
         account: formData.account,
         date: formData.date,
         encrypted: true,
@@ -193,6 +197,53 @@ export function TransactionForm({}: TransactionFormProps) {
     }
   };
 
+  // Handle service selection from the dynamic dropdown
+  // This function populates form fields based on the selected service's pricing
+  // Data flow: Service data comes from database via getServices(), stored in services state
+  // Upon selection, updates formData with service details and computes amount based on pricing type
+  const handleServiceSelection = (serviceId: string) => {
+    const service = services.find(s => s.id === serviceId);
+    if (service) {
+      // Auto-populate description with service name
+      // Compute amount: use hourlyRate as the primary pricing metric
+      // In a real app, this could include custom logic like hours * rate or API call for dynamic pricing
+      const computedAmount = service.hourlyRate;
+      setFormData(prev => ({
+        ...prev,
+        selectedServiceId: serviceId,
+        productId: serviceId, // Reuse productId field for service linking
+        description: service.name,
+        amount: computedAmount.toString(),
+        type: 'income',
+        category: 'Services',
+      }));
+      trackFeature('transactions', 'service_selected_dropdown');
+    }
+  };
+
+  // Handle category change with dynamic service dropdown logic
+  // When 'Services' is selected, show secondary dropdown populated from services state
+  // Real-time updates: useEffect below watches services state for changes (e.g., after adding new services)
+  const handleCategoryChange = (category: string) => {
+    setFormData(prev => ({
+      ...prev,
+      category,
+      selectedServiceId: '', // Reset service selection when category changes
+    }));
+    if (category === 'Services') {
+      trackFeature('transactions', 'services_category_selected');
+    }
+    trackFeature('transactions', 'category_selected', category);
+  };
+
+  // useEffect for real-time updates: reset service selection if services list changes
+  // e.g., if user adds a new service in another part of the app and navigates back
+  useEffect(() => {
+    if (formData.category === 'Services' && !services.some(s => s.id === formData.selectedServiceId)) {
+      setFormData(prev => ({ ...prev, selectedServiceId: '' }));
+    }
+  }, [services, formData.category, formData.selectedServiceId]);
+
   const handleProductSelection = (productId: string) => {
     const product = products.find(p => p.id === productId);
     const service = services.find(s => s.id === productId);
@@ -201,6 +252,7 @@ export function TransactionForm({}: TransactionFormProps) {
       setFormData(prev => ({
         ...prev,
         productId,
+        selectedServiceId: '', // Reset service when product selected
         description: product.name,
         amount: product.price.toString(),
         type: 'income',
@@ -208,15 +260,8 @@ export function TransactionForm({}: TransactionFormProps) {
       }));
       trackFeature('transactions', 'product_selected');
     } else if (service) {
-      setFormData(prev => ({
-        ...prev,
-        productId,
-        description: service.name,
-        amount: service.hourlyRate.toString(),
-        type: 'income',
-        category: 'Services',
-      }));
-      trackFeature('transactions', 'service_selected');
+      // For quick select, also use the new handleServiceSelection logic
+      handleServiceSelection(service.id);
     }
   };
 
@@ -297,7 +342,7 @@ export function TransactionForm({}: TransactionFormProps) {
           )}
 
           {/* Quick Select from Products/Services */}
-          {(products.length > 0 || services.length > 0) && (
+          {!isLegalFirm && (products.length > 0 || services.length > 0) && (
             <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
               <h3 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-3 flex items-center">
                 <Package className="w-4 h-4 mr-2" />
@@ -390,8 +435,7 @@ export function TransactionForm({}: TransactionFormProps) {
                 id="category"
                 value={formData.category}
                 onChange={(e) => {
-                  setFormData(prev => ({ ...prev, category: e.target.value }));
-                  trackFeature('transactions', 'category_selected', e.target.value);
+                  handleCategoryChange(e.target.value);
                 }}
                 className={`w-full px-4 py-3 ${themeClasses.border} border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${themeClasses.cardBackground} ${themeClasses.text}`}
                 required
@@ -404,6 +448,53 @@ export function TransactionForm({}: TransactionFormProps) {
                 ))}
               </select>
             </div>
+
+            {/* Dynamic Services Dropdown - Only shows when category is 'Services' */}
+            {formData.category === 'Services' && (
+              <div>
+                <label htmlFor="service" className={`block text-sm font-medium ${themeClasses.text} mb-2 flex items-center`}>
+                  <Package className="w-4 h-4 mr-2" />
+                  Select Service
+                </label>
+                {services.length > 0 ? (
+                  <select
+                    id="service"
+                    value={formData.selectedServiceId}
+                    onChange={(e) => handleServiceSelection(e.target.value)}
+                    className={`w-full px-4 py-3 ${themeClasses.border} border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${themeClasses.cardBackground} ${themeClasses.text}`}
+                  >
+                    <option value="">Select a service</option>
+                    {services.map((service) => (
+                      <option key={service.id} value={service.id}>
+                        {service.name} - {formatCurrency(service.hourlyRate)}/hr
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className={`p-4 ${themeClasses.cardBackground} border ${themeClasses.border} rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800`}>
+                    <div className="flex items-center space-x-2">
+                      <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                      <span className={`text-sm ${themeClasses.text}`}>
+                        No services available.{' '}
+                        <button
+                          type="button"
+                          onClick={() => navigate('/products')}
+                          className="text-blue-600 hover:underline font-medium"
+                        >
+                          Add your first service
+                        </button>
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {/* Form validation integration: Show warning if service not selected but category is Services */}
+                {formData.category === 'Services' && !formData.selectedServiceId && (
+                  <p className={`text-xs ${themeClasses.textSecondary} mt-1`}>
+                    Selecting a service will auto-populate the description and amount fields.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div>
               <label htmlFor="account" className={`block text-sm font-medium ${themeClasses.text} mb-2`}>
@@ -427,90 +518,92 @@ export function TransactionForm({}: TransactionFormProps) {
               </select>
             </div>
 
-            {/* Client Selection (Optional for all business types) */}
-            <div>
-              <label htmlFor="client" className={`block text-sm font-medium ${themeClasses.text} mb-2 flex items-center`}>
-                <User className="w-4 h-4 mr-2" />
-                {t('') || 'Client (Optional)'}
-              </label>
-              
-              {clients.length === 0 ? (
-                <div className={`p-4 ${themeClasses.cardBackground} border ${themeClasses.border} rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800`}>
-                  <div className="flex items-start space-x-3">
-                    <div className="flex-shrink-0 mt-0.5">
-                      <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
-                    </div>
-                    <div className="flex-1">
-                      <p className={`text-sm ${themeClasses.text}`}>
-                        {t('') || 'No clients available'}
-                      </p>
-                      <p className={`text-sm ${themeClasses.textSecondary} mt-1`}>
-                        {t('') || 'You can still create transactions without linking to a client, or add your first client to start tracking client-specific transactions.'}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => navigate('/clients')}
-                        className="mt-3 inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-100 dark:bg-blue-900/20 rounded-md hover:bg-blue-200 dark:hover:bg-blue-800/30 transition-colors"
-                      >
-                        {t('') || 'Add First Client'}
-                      </button>
+            {/* Client Selection (Optional for non-General Small Business types) */}
+            {businessType !== 'general' && (
+              <div>
+                <label htmlFor="client" className={`block text-sm font-medium ${themeClasses.text} mb-2 flex items-center`}>
+                  <User className="w-4 h-4 mr-2" />
+                  {t('') || 'Client (Optional)'}
+                </label>
+                
+                {clients.length === 0 ? (
+                  <div className={`p-4 ${themeClasses.cardBackground} border ${themeClasses.border} rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800`}>
+                    <div className="flex items-start space-x-3">
+                      <div className="flex-shrink-0 mt-0.5">
+                        <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+                      </div>
+                      <div className="flex-1">
+                        <p className={`text-sm ${themeClasses.text}`}>
+                          {t('') || 'No clients available'}
+                        </p>
+                        <p className={`text-sm ${themeClasses.textSecondary} mt-1`}>
+                          {t('') || 'You can still create transactions without linking to a client, or add your first client to start tracking client-specific transactions.'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => navigate('/clients')}
+                          className="mt-3 inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-100 dark:bg-blue-900/20 rounded-md hover:bg-blue-200 dark:hover:bg-blue-800/30 transition-colors"
+                        >
+                          {t('') || 'Add First Client'}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <>
-                  <select
-                    id="client"
-                    value={formData.clientId}
-                    onChange={(e) => handleClientChange(e.target.value)}
-                    className={`w-full px-4 py-3 ${themeClasses.border} border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${themeClasses.cardBackground} ${themeClasses.text}`}
-                  >
-                    <option value="">{t('') || 'No Client / Select a client'}</option>
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.id}>
-                        {client.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className={`text-xs ${themeClasses.textSecondary} mt-1`}>
-                    {t('') || 'Client linking is optional. Leave unselected for general transactions.'}
-                  </p>
+                ) : (
+                  <>
+                    <select
+                      id="client"
+                      value={formData.clientId}
+                      onChange={(e) => handleClientChange(e.target.value)}
+                      className={`w-full px-4 py-3 ${themeClasses.border} border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${themeClasses.cardBackground} ${themeClasses.text}`}
+                    >
+                      <option value="">{t('') || 'No Client / Select a client'}</option>
+                      {clients.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className={`text-xs ${themeClasses.textSecondary} mt-1`}>
+                      {t('') || 'Client linking is optional. Leave unselected for general transactions.'}
+                    </p>
 
-                  {/* Enhanced Client Display Preview */}
-                  {formData.clientId && (
-                    <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                      <label className={`block text-sm font-semibold ${themeClasses.text} mb-1 flex items-center`}>
-                        <User className="w-4 h-4 mr-2 text-blue-600 dark:text-blue-400" />
-                        {t('') || 'Selected Client'}
-                      </label>
-                      {(() => {
-                        const selectedClient = clients.find(c => c.id === formData.clientId);
-                        const displayName = selectedClient?.name || t('clients.unknownClient') || 'Unknown Client';
-                        const truncatedName = displayName.length > 30 ? `${displayName.substring(0, 30)}...` : displayName;
-                        return (
-                          <div
-                            className={`inline-flex items-center px-3 py-2 bg-white dark:bg-gray-800 rounded-md shadow-sm border ${themeClasses.border} text-sm font-bold ${themeClasses.text} max-w-full overflow-hidden`}
-                            title={displayName}
-                            style={{
-                              whiteSpace: 'nowrap',
-                              textOverflow: 'ellipsis',
-                              wordBreak: 'keep-all'
-                            }}
-                          >
-                            {truncatedName}
-                          </div>
-                        );
-                      })()}
-                      <p className={`text-xs ${themeClasses.textSecondary} mt-1`}>
-                        {t('') || 'This client will be linked to the transaction for tracking purposes.'}
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+                    {/* Enhanced Client Display Preview */}
+                    {formData.clientId && (
+                      <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                        <label className={`block text-sm font-semibold ${themeClasses.text} mb-1 flex items-center`}>
+                          <User className="w-4 h-4 mr-2 text-blue-600 dark:text-blue-400" />
+                          {t('') || 'Selected Client'}
+                        </label>
+                        {(() => {
+                          const selectedClient = clients.find(c => c.id === formData.clientId);
+                          const displayName = selectedClient?.name || t('clients.unknownClient') || 'Unknown Client';
+                          const truncatedName = displayName.length > 30 ? `${displayName.substring(0, 30)}...` : displayName;
+                          return (
+                            <div
+                              className={`inline-flex items-center px-3 py-2 bg-white dark:bg-gray-800 rounded-md shadow-sm border ${themeClasses.border} text-sm font-bold ${themeClasses.text} max-w-full overflow-hidden`}
+                              title={displayName}
+                              style={{
+                                whiteSpace: 'nowrap',
+                                textOverflow: 'ellipsis',
+                                wordBreak: 'keep-all'
+                              }}
+                            >
+                              {truncatedName}
+                            </div>
+                          );
+                        })()}
+                        <p className={`text-xs ${themeClasses.textSecondary} mt-1`}>
+                          {t('') || 'This client will be linked to the transaction for tracking purposes.'}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
 
-            {formData.clientId && clientFiles.length > 0 && (
+            {formData.clientId && clientFiles.length > 0 && businessType !== 'general' && (
               <div>
                 <label htmlFor="clientFile" className={`block text-sm font-medium ${themeClasses.text} mb-2 flex items-center`}>
                   <FileText className="w-4 h-4 mr-2" />

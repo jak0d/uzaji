@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  X, 
-  Plus, 
-  Trash2, 
+import {
+  X,
+  Plus,
+  Trash2,
   Calendar,
   Building,
   FileText,
@@ -11,6 +11,7 @@ import {
   Send
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
+import { addBill, updateBill } from '../utils/database';
 
 interface BillItem {
   id: string;
@@ -51,7 +52,7 @@ export function BillForm({ isOpen, onClose, bill, onSave }: BillFormProps) {
   const { formatCurrency, getThemeClasses } = useSettings();
   const themeClasses = getThemeClasses();
 
-  const [formData, setFormData] = useState<Bill>({
+  const [formData, setFormData] = useState<Partial<Bill>>({
     billNumber: '',
     vendorName: '',
     vendorEmail: '',
@@ -73,7 +74,19 @@ export function BillForm({ isOpen, onClose, bill, onSave }: BillFormProps) {
     } else {
       // Generate bill number
       const billNumber = `BILL-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
-      setFormData(prev => ({ ...prev, billNumber }));
+      setFormData({
+        billNumber,
+        vendorName: '',
+        vendorEmail: '',
+        billDate: new Date().toISOString().split('T')[0],
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        status: 'draft' as const,
+        subtotal: 0,
+        taxAmount: 0,
+        totalAmount: 0,
+        items: [],
+        notes: ''
+      });
     }
   }, [bill]);
 
@@ -88,35 +101,35 @@ export function BillForm({ isOpen, onClose, bill, onSave }: BillFormProps) {
     };
     setFormData(prev => ({
       ...prev,
-      items: [...prev.items, newItem]
+      items: [...(prev.items || []), newItem]
     }));
   };
 
   const updateItem = (itemId: string, field: keyof BillItem, value: any) => {
     setFormData(prev => ({
       ...prev,
-      items: prev.items.map(item => {
+      items: (prev.items || []).map(item => {
         if (item.id === itemId) {
           const updatedItem = { ...item, [field]: value };
           if (field === 'quantity' || field === 'unitPrice') {
-            updatedItem.totalPrice = updatedItem.quantity * updatedItem.unitPrice;
+            updatedItem.totalPrice = (updatedItem.quantity || 0) * (updatedItem.unitPrice || 0);
           }
           return updatedItem;
         }
         return item;
-      })
+      }) as BillItem[]
     }));
   };
 
   const removeItem = (itemId: string) => {
     setFormData(prev => ({
       ...prev,
-      items: prev.items.filter(item => item.id !== itemId)
+      items: (prev.items || []).filter(item => item.id !== itemId)
     }));
   };
 
   useEffect(() => {
-    const subtotal = formData.items.reduce((sum, item) => sum + item.totalPrice, 0);
+    const subtotal = (formData.items || []).reduce((sum, item) => sum + (item.totalPrice || 0), 0);
     const taxAmount = subtotal * 0.1; // 10% tax rate
     const totalAmount = subtotal + taxAmount;
 
@@ -131,7 +144,7 @@ export function BillForm({ isOpen, onClose, bill, onSave }: BillFormProps) {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.vendorName.trim()) {
+    if (!formData.vendorName?.trim()) {
       newErrors.vendorName = 'Vendor name is required';
     }
 
@@ -143,18 +156,18 @@ export function BillForm({ isOpen, onClose, bill, onSave }: BillFormProps) {
       newErrors.dueDate = 'Due date is required';
     }
 
-    if (formData.items.length === 0) {
+    if ((formData.items || []).length === 0) {
       newErrors.items = 'At least one item is required';
     }
 
-    formData.items.forEach((item, index) => {
-      if (!item.description.trim()) {
+    (formData.items || []).forEach((item, index) => {
+      if (!item.description?.trim()) {
         newErrors[`item_${index}_description`] = 'Description is required';
       }
-      if (item.quantity <= 0) {
+      if ((item.quantity || 0) <= 0) {
         newErrors[`item_${index}_quantity`] = 'Quantity must be greater than 0';
       }
-      if (item.unitPrice < 0) {
+      if ((item.unitPrice || 0) < 0) {
         newErrors[`item_${index}_unitPrice`] = 'Unit price cannot be negative';
       }
     });
@@ -163,17 +176,57 @@ export function BillForm({ isOpen, onClose, bill, onSave }: BillFormProps) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSave = (status: 'draft' | 'pending' = 'draft') => {
+  const handleSave = async (status: 'draft' | 'pending' = 'draft') => {
     if (!validateForm()) return;
 
-    const billToSave: Bill = {
+    const now = new Date().toISOString();
+    const billData: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'> = {
       ...formData,
       status,
-      updatedAt: new Date().toISOString(),
-      createdAt: formData.createdAt || new Date().toISOString()
-    };
+      items: formData.items || [],
+      subtotal: formData.subtotal || 0,
+      taxAmount: formData.taxAmount || 0,
+      totalAmount: formData.totalAmount || 0,
+      notes: formData.notes || '',
+    } as Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>;
 
-    onSave(billToSave);
+    try {
+      if (bill && bill.id) {
+        // Update existing bill
+        const updatedBill: Bill = {
+          ...billData,
+          id: bill.id,
+          createdAt: bill.createdAt || now,
+          updatedAt: now,
+        };
+        await updateBill(bill.id, updatedBill);
+        onSave(updatedBill);
+      } else {
+        // Create new bill
+        const newBillData: Omit<Bill, 'id'> = {
+          ...billData,
+          createdAt: now,
+          updatedAt: now,
+        };
+        const newId = await addBill(newBillData);
+        const savedBill: Bill = {
+          ...newBillData,
+          id: newId,
+        };
+        onSave(savedBill);
+      }
+    } catch (error) {
+      console.error('Failed to save bill:', error);
+      // Fallback for UI consistency
+      const fallbackBill: Bill = {
+        ...billData,
+        id: bill?.id || Date.now().toString(),
+        createdAt: now,
+        updatedAt: now,
+      };
+      onSave(fallbackBill);
+    }
+
     onClose();
   };
 
@@ -189,7 +242,7 @@ export function BillForm({ isOpen, onClose, bill, onSave }: BillFormProps) {
               {bill ? 'Edit Bill' : 'Create New Bill'}
             </h2>
             <p className={`text-sm ${themeClasses.textSecondary} mt-1`}>
-              {formData.billNumber}
+              {formData.billNumber || ''}
             </p>
           </div>
           <button
@@ -288,7 +341,7 @@ export function BillForm({ isOpen, onClose, bill, onSave }: BillFormProps) {
               )}
 
               <div className="space-y-3">
-                {formData.items.map((item, index) => (
+                {(formData.items || []).map((item, index) => (
                   <div key={item.id} className={`border border-gray-200 dark:border-gray-700 rounded-lg p-4 ${themeClasses.cardBackground}`}>
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                       <div className="md:col-span-2">
@@ -370,15 +423,15 @@ export function BillForm({ isOpen, onClose, bill, onSave }: BillFormProps) {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className={themeClasses.textSecondary}>Subtotal:</span>
-                  <span className={themeClasses.text}>{formatCurrency(formData.subtotal)}</span>
+                  <span className={themeClasses.text}>{formatCurrency(formData.subtotal || 0)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className={themeClasses.textSecondary}>Tax (10%):</span>
-                  <span className={themeClasses.text}>{formatCurrency(formData.taxAmount)}</span>
+                  <span className={themeClasses.text}>{formatCurrency(formData.taxAmount || 0)}</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold border-t border-gray-200 dark:border-gray-700 pt-2">
                   <span className={themeClasses.text}>Total:</span>
-                  <span className={themeClasses.text}>{formatCurrency(formData.totalAmount)}</span>
+                  <span className={themeClasses.text}>{formatCurrency(formData.totalAmount || 0)}</span>
                 </div>
               </div>
             </div>
