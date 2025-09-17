@@ -381,15 +381,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
                 >
                   {t('landing.footer.contactSupport')}
                 </a>
-                <a
-                  href="https://bolt.new"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center space-x-2 text-gray-400 hover:text-white transition-colors text-sm font-medium group"
-                >
-                  <span>Built with Bolt.new</span>
-                  <ExternalLink className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                </a>
+               
               </div>
             </div>
           </div>

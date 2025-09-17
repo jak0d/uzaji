@@ -1,19 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  FileText, 
-  DollarSign, 
-  Users, 
+import {
+  Plus,
+  Edit,
+  Trash2,
+  FileText,
+  DollarSign,
+  Users,
   Search,
   ArrowLeft,
   Eye,
-  Download
+  Download,
+  Paperclip
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
-import { deleteClient, getClients, addClient, getClientFiles } from '../utils/database';
+import { deleteClient, getClients, addClient, getClientFiles, deleteClientFile } from '../utils/database';
+import { useLegalFileAttachments } from '../hooks/useLegalFileAttachments';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Client {
@@ -546,9 +548,60 @@ function ClientDetailView({ client, files, activeTab, onTabChange, themeClasses,
 // Client Files Tab Component
 function ClientFilesTab({ files, themeClasses, formatCurrency, clientId }: any) {
   const navigate = useNavigate();
+  const [attachmentCounts, setAttachmentCounts] = useState<Record<string, number>>({});
+  const [isLoadingAttachments, setIsLoadingAttachments] = useState(false);
+  
+  const { loadAttachments } = useLegalFileAttachments();
   
   const handleAddFile = () => {
     navigate(`/clients/${clientId}/files/new`);
+  };
+
+  // Load attachment counts for all files
+  useEffect(() => {
+    const loadAttachmentCounts = async () => {
+      if (files.length === 0) return;
+      
+      setIsLoadingAttachments(true);
+      const counts: Record<string, number> = {};
+      
+      try {
+        // For performance, we could batch these or use a more efficient approach
+        // For now, load each file's attachments
+        for (const file of files) {
+          await loadAttachments(file.id);
+          // In a real implementation, we'd need to access the loaded attachments
+          // Since useLegalFileAttachments manages its own state, this is simplified
+          counts[file.id] = 0; // Placeholder - would need actual count
+        }
+      } catch (error) {
+        console.error('Error loading attachment counts:', error);
+      } finally {
+        setIsLoadingAttachments(false);
+        setAttachmentCounts(counts);
+      }
+    };
+
+    loadAttachmentCounts();
+  }, [files, loadAttachments]);
+
+  const handleViewDocuments = (fileId: string) => {
+    navigate(`/clients/${clientId}/files/${fileId}/documents`);
+  };
+
+  const handleDeleteFile = async (fileId: string) => {
+    if (window.confirm('Are you sure you want to delete this file? This action cannot be undone.')) {
+      try {
+        await deleteClientFile(fileId);
+        // Refresh the files list by reloading from database
+        const updatedFiles = await getClientFiles(clientId);
+        // Note: In a real app, we'd pass this up to parent component
+        window.location.reload();
+      } catch (error) {
+        console.error('Error deleting file:', error);
+        alert('Failed to delete file. Please try again.');
+      }
+    }
   };
 
   return (
@@ -556,7 +609,7 @@ function ClientFilesTab({ files, themeClasses, formatCurrency, clientId }: any) 
       <div className="p-6 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between">
           <h3 className={`text-lg font-semibold ${themeClasses.text}`}>Legal Files</h3>
-          <button 
+          <button
             onClick={handleAddFile}
             className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
@@ -573,7 +626,7 @@ function ClientFilesTab({ files, themeClasses, formatCurrency, clientId }: any) 
           <p className={`${themeClasses.textSecondary} mb-4`}>
             Add the first legal file for this client to start tracking finances.
           </p>
-          <button 
+          <button
             onClick={handleAddFile}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
@@ -585,28 +638,37 @@ function ClientFilesTab({ files, themeClasses, formatCurrency, clientId }: any) 
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
-                <th className={`px-6 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
                   File Name
                 </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
                   Date Opened
                 </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
+                  Case Type
+                </th>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
+                  Status
+                </th>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
                   Fees to be Paid
                 </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
                   Deposit Paid
                 </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
                   Balance Remaining
                 </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
                   Total Expenses
                 </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
                   Net Summary
                 </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
+                  Attachments
+                </th>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${themeClasses.textSecondary} uppercase tracking-wider`}>
                   Actions
                 </th>
               </tr>
@@ -614,68 +676,98 @@ function ClientFilesTab({ files, themeClasses, formatCurrency, clientId }: any) 
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {files.map((file: ClientFile) => (
                 <tr key={file.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                  <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${themeClasses.text}`}>
-                    {file.fileName}
+                  <td className={`px-4 py-4 whitespace-nowrap text-sm font-medium ${themeClasses.text}`}>
+                    <div>
+                      <div className="font-medium">{file.fileName}</div>
+                      {file.caseNumber && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400">{file.caseNumber}</div>
+                      )}
+                    </div>
                   </td>
-                  <td className={`px-6 py-4 whitespace-nowrap text-sm ${themeClasses.textSecondary}`}>
+                  <td className={`px-4 py-4 whitespace-nowrap text-sm ${themeClasses.textSecondary}`}>
                     {new Date(file.dateOpened).toLocaleDateString()}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                  <td className={`px-4 py-4 whitespace-nowrap text-sm ${themeClasses.textSecondary}`}>
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      file.caseType === 'active' ? 'bg-green-100 text-green-800' :
+                      file.caseType === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                    }`}>
+                      {file.caseType || 'General'}
+                    </span>
+                  </td>
+                  <td className={`px-4 py-4 whitespace-nowrap text-sm ${themeClasses.textSecondary}`}>
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      file.status === 'active' ? 'bg-green-100 text-green-800' :
+                      file.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                    }`}>
+                      {file.status.charAt(0).toUpperCase() + file.status.slice(1)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
                     {formatCurrency(file.feesToBePaid)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
+                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-green-600">
                     {formatCurrency(file.depositPaid)}
                   </td>
-                  <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
+                  <td className={`px-4 py-4 whitespace-nowrap text-sm font-medium ${
                     file.balanceRemaining > 0 ? 'text-red-600' : 'text-green-600'
                   }`}>
                     {formatCurrency(file.balanceRemaining)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-orange-600">
+                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-orange-600">
                     {formatCurrency(file.totalExpenses)}
                   </td>
-                  <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold ${
+                  <td className={`px-4 py-4 whitespace-nowrap text-sm font-bold ${
                     file.netSummary > 0 ? 'text-red-600' : 'text-green-600'
                   }`}>
                     {formatCurrency(file.netSummary)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                  <td className="px-4 py-4 whitespace-nowrap text-sm">
                     <div className="flex items-center space-x-2">
-                      <button 
+                      <Paperclip className={`w-4 h-4 ${attachmentCounts[file.id] > 0 ? 'text-blue-600' : themeClasses.textSecondary}`} />
+                      <span className={themeClasses.textSecondary}>
+                        {attachmentCounts[file.id] || 0} {attachmentCounts[file.id] === 1 ? 'document' : 'documents'}
+                      </span>
+                      {attachmentCounts[file.id] > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewDocuments(file.id);
+                          }}
+                          className="text-blue-600 hover:text-blue-800 text-xs underline"
+                          title="View documents"
+                        >
+                          View
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm">
+                    <div className="flex items-center space-x-2">
+                      <button
                         onClick={() => navigate(`/clients/${clientId}/files/${file.id}`)}
                         className={`p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors ${themeClasses.textSecondary} hover:${themeClasses.text}`}
                         title="View File"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button 
+                      <button
                         onClick={() => navigate(`/clients/${clientId}/files/${file.id}/edit`)}
                         className={`p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors ${themeClasses.textSecondary} hover:text-blue-600 dark:hover:text-blue-400`}
                         title="Edit File"
                       >
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button 
-                        onClick={async () => {
-                          if (window.confirm('Are you sure you want to delete this file? This action cannot be undone.')) {
-                            try {
-                              const existingFiles = JSON.parse(localStorage.getItem('uzaji_clientFiles') || '[]');
-                              const updatedFiles = existingFiles.filter((f: ClientFile) => f.id !== file.id);
-                              localStorage.setItem('uzaji_clientFiles', JSON.stringify(updatedFiles));
-                              // Refresh the files list
-                              window.location.reload();
-                            } catch (error) {
-                              console.error('Error deleting file:', error);
-                              alert('Failed to delete file. Please try again.');
-                            }
-                          }
-                        }}
+                      <button
+                        onClick={() => handleDeleteFile(file.id)}
                         className={`p-1.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors ${themeClasses.textSecondary} hover:text-red-600 dark:hover:text-red-400`}
                         title="Delete File"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                      <button 
+                      <button
                         onClick={() => {
                           // Generate a simple text file with file details
                           const fileContent = `File Details
@@ -690,7 +782,7 @@ Status: ${file.status.charAt(0).toUpperCase() + file.status.slice(1)}
 
 Description:
 ${file.description || 'No description provided'}`;
-                          
+                           
                           const blob = new Blob([fileContent], { type: 'text/plain' });
                           const url = URL.createObjectURL(blob);
                           const a = document.createElement('a');

@@ -17,6 +17,7 @@ import { encryption } from '../utils/encryption';
 
 interface FileAttachmentSystemProps {
   transactionId?: string;
+  clientFileId?: string;
   onFilesChange?: (files: AttachedFile[]) => void;
   maxFiles?: number;
   maxFileSize?: number; // in MB
@@ -144,12 +145,13 @@ function FilePreview({ file, onRemove, onPreview }: FilePreviewProps) {
   );
 }
 
-export function FileAttachmentSystem({ 
+export function FileAttachmentSystem({
   transactionId,
+  clientFileId,
   onFilesChange,
   maxFiles = 5,
   maxFileSize = 10, // 10MB
-  acceptedTypes = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'],
+  acceptedTypes = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.txt'],
   className = ''
 }: FileAttachmentSystemProps) {
   const { getThemeClasses } = useSettings();
@@ -229,14 +231,15 @@ export function FileAttachmentSystem({
         previewUrl = URL.createObjectURL(file);
       }
 
-      // Save to database if transactionId is provided
-      if (transactionId) {
+      // Save to database if either transactionId or clientFileId is provided
+      if (transactionId || clientFileId) {
         await addFileAttachment({
           filename: file.name,
           size: file.size,
           type: file.type,
           data: encryptedData,
-          transactionId,
+          transactionId: transactionId || undefined,
+          clientFileId: clientFileId || undefined,
           encrypted: encryption.isAuthenticated()
         });
       }
@@ -325,17 +328,17 @@ export function FileAttachmentSystem({
 
   const removeFile = async (fileId: string) => {
     try {
-      // Remove from database if it exists
-      if (transactionId) {
+      // Remove from database if either ID is provided
+      if (transactionId || clientFileId) {
         await deleteFileAttachment(fileId);
       }
-
+  
       // Clean up preview URL
       const file = attachedFiles.find(f => f.id === fileId);
       if (file?.url) {
         URL.revokeObjectURL(file.url);
       }
-
+  
       const updatedFiles = attachedFiles.filter(f => f.id !== fileId);
       setAttachedFiles(updatedFiles);
       onFilesChange?.(updatedFiles);
