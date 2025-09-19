@@ -12,7 +12,7 @@ import {
   Download,
   Paperclip
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useSettings } from '../hooks/useSettings';
 import { deleteClient, getClients, addClient, getClientFiles, deleteClientFile } from '../utils/database';
 import { useLegalFileAttachments } from '../hooks/useLegalFileAttachments';
@@ -60,6 +60,7 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
   const { formatCurrency, getThemeClasses } = useSettings();
   const themeClasses = getThemeClasses();
   const navigate = useNavigate();
+  const location = useLocation();
   
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -68,6 +69,7 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
   const [activeTab, setActiveTab] = useState<'files' | 'transactions' | 'notes' | 'documents'>('files');
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string>('');
   const [newClient, setNewClient] = useState<Omit<Client, 'id' | 'createdAt' | 'updatedAt'>>({ 
     name: '', 
     email: '', 
@@ -93,6 +95,27 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
   useEffect(() => {
     loadClients();
   }, [loadClients]);
+
+  // Handle navigation state (auto-select client and show success messages)
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.selectedClientId && clients.length > 0) {
+      const client = clients.find(c => c.id === state.selectedClientId);
+      if (client) {
+        setSelectedClient(client);
+        loadClientFiles(client.id);
+      }
+      
+      // Show success message if provided
+      if (state?.showSuccessMessage) {
+        setSuccessMessage(state.showSuccessMessage);
+        setTimeout(() => setSuccessMessage(''), 5000);
+      }
+      
+      // Clear the state to prevent re-triggering
+      navigate(location.pathname, { replace: true });
+    }
+  }, [clients, location.state, navigate, location.pathname]);
   
   // Reload files when selected client changes
   useEffect(() => {
@@ -208,6 +231,24 @@ export function ClientFileTracker({ className = '' }: ClientFileTrackerProps) {
           Back to Dashboard
         </button>
       </div>
+
+      {/* Success Message */}
+      {successMessage && (
+        <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 rounded-lg flex items-start animate-pulse">
+          <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <div className="flex-1">
+            <p className="font-medium">{successMessage}</p>
+            <button
+              onClick={() => setSuccessMessage('')}
+              className="text-xs text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 mt-1 underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
       
       {selectedClient ? (
         <ClientDetailView
@@ -451,8 +492,45 @@ function ClientListView({ clients, searchTerm, onSearchChange, onClientSelect, o
 
 // Client Detail View Component
 function ClientDetailView({ client, files, activeTab, onTabChange, themeClasses, formatCurrency, onBack }: any) {
+  const navigate = useNavigate();
+  
   return (
     <div>
+      {/* Breadcrumb Navigation */}
+      <nav className="mb-4" aria-label="Breadcrumb">
+        <ol className="flex items-center space-x-2 text-sm">
+          <li>
+            <button
+              onClick={() => navigate('/dashboard')}
+              className={`${themeClasses.textSecondary} hover:${themeClasses.text} transition-colors`}
+            >
+              Dashboard
+            </button>
+          </li>
+          <li className={themeClasses.textSecondary}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </li>
+          <li>
+            <button
+              onClick={onBack}
+              className={`${themeClasses.textSecondary} hover:${themeClasses.text} transition-colors`}
+            >
+              Clients & Files
+            </button>
+          </li>
+          <li className={themeClasses.textSecondary}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </li>
+          <li className={`font-medium ${themeClasses.text}`} aria-current="page">
+            {client.name}
+          </li>
+        </ol>
+      </nav>
+
       {/* Back Button */}
       <button 
         onClick={onBack}
